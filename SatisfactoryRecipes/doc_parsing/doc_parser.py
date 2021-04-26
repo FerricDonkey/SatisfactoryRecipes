@@ -26,6 +26,7 @@ class FINDER:
     Equipement = "Class'/Script/FactoryGame.FGEquipmentDescriptor'"
     Consumable = "Class'/Script/FactoryGame.FGConsumableDescriptor'"
     Building = "Class'/Script/FactoryGame.FGBuildingDescriptor'"
+    NuclearFuel = "Class'/Script/FactoryGame.FGItemDescriptorNuclearFuel'"
 
 ALL_NAMED = (
     FINDER.Item,
@@ -33,7 +34,7 @@ ALL_NAMED = (
     FINDER.BioCrap,
     FINDER.Equipement,
     FINDER.Consumable,
-    #FINDER.Building,
+    FINDER.NuclearFuel,
 )
 
 ACTUAL_VALUES_KEY = 'Classes'

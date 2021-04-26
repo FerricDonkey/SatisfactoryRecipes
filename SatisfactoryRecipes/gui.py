@@ -67,7 +67,8 @@ class ProductSelectionPane(qwid.QVBoxLayout):
         self.parent = parent
         self.search_box = qwid.QLineEdit(font = NORMAL_FONT)
         self.product_drop_down = qwid.QComboBox(font = NORMAL_FONT)
-        self.start_button = qwid.QPushButton('Start', font = NORMAL_FONT)
+        self.product_drop_down.currentTextChanged.connect(self.product_dropdown_change_func)
+        #self.start_button = qwid.QPushButton('Start', font = NORMAL_FONT)
 
         self.addWidget(FLabel('Select Product:', font = MEDIUM_FONT))
 
@@ -78,27 +79,70 @@ class ProductSelectionPane(qwid.QVBoxLayout):
         grid.addWidget(self.product_drop_down, 1,1)
 
         self.addLayout(grid)
-        self.addWidget(self.start_button, alignment = qt.AlignRight)
+        #self.addWidget(self.start_button, alignment = qt.AlignRight)
 
         self.search_box.textChanged.connect(self.filter_items)
         self.filter_items()
-        self.start_button.clicked.connect(self.start_button_func)
 
     def product(self):
         return self.product_drop_down.currentText()
 
     def filter_items(self):
         self.product_drop_down.clear()
+
+        search_term = self.search_box.text().strip().lower()
+        all_items_ish = tuple(
+            self._filter_sort_func(
+                search_term = search_term,
+                candidate = candidate
+            )
+            for candidate in cons.PRODUCIBLE_ITEMS
+        )
+
+        all_items_ish = sorted(junk for junk in all_items_ish if junk)
+        # for junk in all_items_ish: print(junk)
+        # print()
+
         self.product_drop_down.addItems(
             (NO_SELECTION,)+tuple(
-                item
-                for item in sorted(cons.PRODUCIBLE_ITEMS)
-                if item.lower().startswith(self.search_box.text().strip().lower())
+                item[-1]
+                for item in all_items_ish
             )
         )
 
-    def start_button_func(self):
-        if self.product() != NO_SELECTION:
+    def _filter_sort_func(self, search_term:str, candidate:str):
+        """
+        sort candidate items by similarity to search term
+
+        Assumes that search_term is lower case and has extraneous spaces removed, and lowers the case
+        of candidate for comparison (but not for returning)
+
+        :param search_term: search term, eg "scr"
+        :param candidate: possible match, eg "Screw"
+        :return: (<sorting order nonsense>, candidate)
+        """
+        candidate_simplified = candidate.lower().strip()
+        if candidate_simplified.startswith(search_term):
+            return 0, 0, candidate
+
+        search_words = search_term.split()
+        candidate_words = candidate_simplified.split()
+        matchiness = len(tuple(
+            word for word in candidate_words
+            if any(word.startswith(search_word) for search_word in search_words)
+        )) / len(candidate_words)
+        if matchiness > 0:
+            return 1, -matchiness, candidate
+
+        if search_term in candidate_simplified:
+            return 2, 0, candidate
+
+        return None
+
+
+    def product_dropdown_change_func(self):
+
+        if self.product() and self.product() != NO_SELECTION:
             self.parent.initialize_production_chain()
             self.product_drop_down.setCurrentIndex(0)
 
@@ -136,16 +180,18 @@ class ProductionResultsPane(qwid.QVBoxLayout):
 
     def per_minute_change_function(self):
         prod_chain = self.parent.production_chain
-        new_consumption = self.per_minute_entry.get_val()
-        prev_consumption = prod_chain.get_desired_per_minute(prod_chain.get_desired_products()[0])
-        self.parent.production_chain.multiply_full_chain(new_consumption/prev_consumption)
-        self.parent.refresh()
+        if prod_chain:
+            new_consumption = self.per_minute_entry.get_val()
+            prev_consumption = prod_chain.get_desired_per_minute(prod_chain.get_desired_products()[0])
+            self.parent.production_chain.multiply_full_chain(new_consumption/prev_consumption)
+            self.parent.production_chain.multiply_desired_amounts(new_consumption / prev_consumption)
+            self.parent.refresh()
 
     def clear_scroll(self):
         try:
             self.excess_container_widget.deleteLater()
-        except:
-            pass
+        except Exception as e:
+            print(f'{type(e).__name__}: {e.args}')
 
     def refresh(self):
         # todo currently supports one product, change maybe
@@ -200,8 +246,9 @@ class RequiredIngredientsPane(qwid.QVBoxLayout):
         """
         try:
             self.ingredient_container_widget.deleteLater()
-        except:
-            pass
+        except Exception as e:
+            print(f'{type(e).__name__}: {e.args}')
+
 
     def refresh(self):
         self.clear()
@@ -233,7 +280,7 @@ class SingleIngredientPane(qwid.QVBoxLayout):
         self.item = item
         self.addWidget(FLabel(f'{self.item}'))
         self.per_minute_entry = NumberEntry(default = DEFAULT_AMOUNT_PER_MINUTE)
-        self.per_minute_entry.setFixedWidth(100)
+        #self.per_minute_entry.setFixedWidth(100)
         self.per_minute_entry.setText(format_num(per_minute))
         self.per_minute_entry.editingFinished.connect(self.per_minute_change_function)
 
@@ -312,6 +359,8 @@ class ActiveRecipePanes(qwid.QVBoxLayout):
         self.recipe_container_layout = qwid.QVBoxLayout(self.recipe_container_widget)
         self.recipe_container_layout.setAlignment(qcore.Qt.AlignTop)
 
+        self.stupid_reference_holder = []
+
         self.scrolling_recipe_area = qwid.QScrollArea()
         self.scrolling_recipe_area.setVerticalScrollBarPolicy(qcore.Qt.ScrollBarAlwaysOn)
         self.scrolling_recipe_area.setWidget(self.recipe_container_widget)
@@ -323,11 +372,10 @@ class ActiveRecipePanes(qwid.QVBoxLayout):
         """
         try:
             self.recipe_container_widget.deleteLater()
-        except:
-            pass
+        except Exception as e:
+            print(f'{type(e).__name__}: {e.args}')
 
     def refresh(self):
-        print("sup")
         self.clear()
         self.recipe_container_widget = qwid.QWidget()
         self.recipe_container_layout = qwid.QVBoxLayout(self.recipe_container_widget)
@@ -335,7 +383,12 @@ class ActiveRecipePanes(qwid.QVBoxLayout):
 
         if self.parent.production_chain:
             for index, recipe_name in enumerate(self.parent.production_chain.active_name_to_recipes_d):
+                # new_layout = RecipePane(parent = self.parent, recipe_name = recipe_name)
+                # stupid_widget = qwid.QWidget()
+                # stupid_widget.setMinimumSize(120, 80)
+                # stupid_widget.setLayout(new_layout)
                 self.recipe_container_layout.addLayout(
+                    #stupid_widget
                     RecipePane(parent = self.parent, recipe_name = recipe_name)
                 )
                 if index + 1 < len(self.parent.production_chain.active_name_to_recipes_d):
@@ -352,9 +405,9 @@ class RecipePane(qwid.QVBoxLayout):
         Initialize
         """
         qwid.QVBoxLayout.__init__(self)
+        self.setAlignment(qt.AlignTop)
         self.parent = parent
         self.recipe_name = recipe_name
-
         # RECIPE      [Remove]
         # This is dumb, but will right justify the delete and left justify the name
         outerhlayout = qwid.QHBoxLayout()
@@ -365,6 +418,8 @@ class RecipePane(qwid.QVBoxLayout):
         delbutton = qwid.QPushButton('Remove')
         delbutton.clicked.connect(self.remove_recipe_func)
         innerhlayout2.addWidget(delbutton)
+        outerhlayout.addLayout(innerhlayout1)
+        outerhlayout.addLayout(innerhlayout2)
         self.addLayout(outerhlayout)
 
         # Machine Count: <entry box> [Rescale]
@@ -379,6 +434,8 @@ class RecipePane(qwid.QVBoxLayout):
         )
         rescale_button = qwid.QPushButton('Rescale')
         rescale_button.clicked.connect(lambda: self.rescale_count_func(scale = None))
+        hlayout.addWidget(self.scale_entry_box)
+        self.addLayout(hlayout)
 
         grid = qwid.QGridLayout()
         grid.addWidget(FLabel('Produces'), 0, 0, 1, 3)
@@ -392,10 +449,12 @@ class RecipePane(qwid.QVBoxLayout):
         consumed_per_minute = this_recipe.get_ingredients_per_minute_d()
         for base_col, source_d in zip((1, 5), (prod_per_minute, consumed_per_minute)):
             for row_offset, (product, quantity) in enumerate(source_d.items()):
-                grid.addWidget(FLabel(product), 1 + row_offset, base_col)
+                grid.addWidget(FLabel(product+':'), 1 + row_offset, base_col)
                 grid.addWidget(FLabel(format_num(quantity)), 1 + row_offset, base_col+1)
 
         grid.addWidget(VerticalLineWidget(), 0, 3, max(len(prod_per_minute), len(consumed_per_minute)), 1)
+        self.addLayout(grid)
+
 
     def remove_recipe_func(self):
         self.parent.production_chain.remove_recipe(recipe_name = self.recipe_name)
@@ -434,20 +493,6 @@ class NumberEntry(qwid.QLineEdit):
             return float(self.text())
         return self.default
 
-
-def launch():
-    gui_executor_loop_thing = qwid.QApplication(sys.argv)  # inherit command line args for qt nonsense
-    #screen_dims = gui_executor_loop_thing.primaryScreen().size()
-
-    # apparently if you don't keep a reference to the gui, it gets killed.
-    main_window = qwid.QMainWindow()
-    da_gui = DaGui(main_window = main_window)
-    main_window.setCentralWidget(da_gui)
-    main_window.setWindowTitle('Planner')
-    main_window.show()
-
-    gui_executor_loop_thing.exec_()
-
 class HorizontalLineWidget(qwid.QFrame):
     def __init__(self):
         qwid.QFrame.__init__(self)
@@ -464,3 +509,19 @@ def format_num(num: Union[int, float]) -> str:
     if isinstance(num, int):
         return str(num)
     return f'{num:0.2f}'
+
+def launch():
+    gui_executor_loop_thing = qwid.QApplication(sys.argv)  # inherit command line args for qt nonsense
+
+    size = gui_executor_loop_thing.primaryScreen().size()
+    width= min(.9*size.width(), 2000)
+    height = min(.9*size.height(), 1200)
+
+    main_window = qwid.QMainWindow()
+    da_gui = DaGui(main_window = main_window)
+    main_window.setCentralWidget(da_gui)
+    main_window.setWindowTitle('Production Chain')
+    main_window.resize(width, height)
+    main_window.show()
+
+    gui_executor_loop_thing.exec_()

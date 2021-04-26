@@ -5,6 +5,7 @@ from typing import Optional, Dict, Union, Collection
 
 from . import recipe_classes as rc
 from . import constants as cons
+import math
 
 class ProductionChain:
     """
@@ -56,8 +57,10 @@ class ProductionChain:
         return {
             item: quantity
             for item, quantity in to_return.items()
-            if quantity > 0
-            or item in self._desired_products_per_min_d
+            if (quantity > 0 and item not in self._desired_products_per_min_d)
+            or (item in self._desired_products_per_min_d
+                and (quantity< 0 or quantity > self._desired_products_per_min_d[item])
+                )
         }
 
 
@@ -96,7 +99,7 @@ class ProductionChain:
             for item, _ in self._desired_products_per_min_d.items():
                 to_return[item] = to_return.get(item, 0) - prod_d.get(item, 0)
 
-        return {item: quantity for item, quantity in to_return.items() if quantity != 0}
+        return {item: quantity for item, quantity in to_return.items() if not math.isclose(quantity, 0)}
 
     def add_recipe(self, recipe_name:str, auto_scale = True):
         if recipe_name in self.active_name_to_recipes_d:
@@ -105,7 +108,6 @@ class ProductionChain:
         if auto_scale:
             new_recipe.scale_to_ingredients_per_min_d(self.get_ingredients_per_minute_d())
         self.active_name_to_recipes_d[new_recipe.recipe_name] = new_recipe
-        print(self.get_ingredients_per_minute_d())
 
 
     def remove_recipe(self, recipe_name: str):
