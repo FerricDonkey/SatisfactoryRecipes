@@ -15,6 +15,7 @@ BIG_FONT.setBold(True)
 MEDIUM_FONT = qgui.QFont('Times New Roman', 14)
 MEDIUM_FONT.setBold(True)
 NORMAL_FONT = qgui.QFont('Times New Roman', 12)
+SMALL_FONT = qgui.QFont('Times New Roman', 10)
 
 NO_SELECTION = '--None--'
 NO_RECIPE = 'Pre-Made'
@@ -37,9 +38,9 @@ class DaGui(qwid.QWidget):
         self.recipe_display = ActiveRecipePanes(parent = self)
         self.required_ingredients_display = RequiredIngredientsPane(parent = self)
 
-        self.master_h_layout.addLayout(production_vlayout)
-        self.master_h_layout.addLayout(self.recipe_display)
-        self.master_h_layout.addLayout(self.required_ingredients_display)
+        self.master_h_layout.addLayout(production_vlayout, 4)
+        self.master_h_layout.addLayout(self.recipe_display, 8)
+        self.master_h_layout.addLayout(self.required_ingredients_display, 6)
 
 
     def refresh(self):
@@ -321,11 +322,13 @@ class CompositeResourcePane(SingleIngredientPane):
         )
         self.recipe_drop_down = qwid.QComboBox(font = NORMAL_FONT)
         self.recipe_drop_down.addItems(
-            (NO_RECIPE,)+
-            tuple(
-                name
-                for name, recipe in sorted(cons.NAME_TO_RECIPE_D.items())
-                if self.item in recipe.get_products_per_minute_d()
+            [NO_RECIPE,]+
+            sorted(
+                (
+                    name
+                    for name, recipe in sorted(cons.NAME_TO_RECIPE_D.items())
+                    if self.item in recipe.get_products_per_minute_d()
+                ), key = lambda val: (1, val) if val.startswith('Alternate') else (0, val)
             )
         )
         self.recipe_drop_down.currentTextChanged.connect(self.recipe_selection_function)
@@ -415,7 +418,7 @@ class RecipePane(qwid.QVBoxLayout):
         innerhlayout2 = qwid.QHBoxLayout()
         innerhlayout2.setAlignment(qt.AlignRight)
         innerhlayout1.addWidget(FLabel(self.recipe_name))
-        delbutton = qwid.QPushButton('Remove')
+        delbutton = qwid.QPushButton('Remove', font = SMALL_FONT)
         delbutton.clicked.connect(self.remove_recipe_func)
         innerhlayout2.addWidget(delbutton)
         outerhlayout.addLayout(innerhlayout1)
@@ -438,9 +441,9 @@ class RecipePane(qwid.QVBoxLayout):
         self.addLayout(hlayout)
 
         grid = qwid.QGridLayout()
-        grid.addWidget(FLabel('Produces'), 0, 0, 1, 3)
+        grid.addWidget(FLabel('Produces:'), 0, 0, 1, 3)
         # vertical line between these two
-        grid.addWidget(FLabel('Consumes'), 0, 4, 1, 3)
+        grid.addWidget(FLabel('Consumes:'), 0, 4, 1, 3)
         grid.addWidget(FLabel('  '), 1, 0) # spacing
         grid.addWidget(FLabel('  '), 1, 4)
 
@@ -449,10 +452,10 @@ class RecipePane(qwid.QVBoxLayout):
         consumed_per_minute = this_recipe.get_ingredients_per_minute_d()
         for base_col, source_d in zip((1, 5), (prod_per_minute, consumed_per_minute)):
             for row_offset, (product, quantity) in enumerate(source_d.items()):
-                grid.addWidget(FLabel(product+':'), 1 + row_offset, base_col)
-                grid.addWidget(FLabel(format_num(quantity)), 1 + row_offset, base_col+1)
+                grid.addWidget(FLabel(product+':'), 1 + row_offset, base_col, alignment = qt.AlignLeft)
+                grid.addWidget(FLabel(format_num(quantity)), 1 + row_offset, base_col+1, alignment = qt.AlignRight)
 
-        grid.addWidget(VerticalLineWidget(), 0, 3, max(len(prod_per_minute), len(consumed_per_minute)), 1)
+        grid.addWidget(VerticalLineWidget(), 0, 3, max(len(prod_per_minute), len(consumed_per_minute))+1, 1)
         self.addLayout(grid)
 
 
@@ -506,8 +509,8 @@ class VerticalLineWidget(qwid.QFrame):
         self.setFrameShadow(qwid.QFrame.Sunken)
 
 def format_num(num: Union[int, float]) -> str:
-    if isinstance(num, int):
-        return str(num)
+    # if isinstance(num, int):
+    #     return str(num)
     return f'{num:0.2f}'
 
 def launch():

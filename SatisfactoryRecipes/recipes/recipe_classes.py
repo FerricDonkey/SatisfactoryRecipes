@@ -2,7 +2,7 @@
 Contains basic classes for recipes
 """
 
-from typing import Union, Dict
+from typing import  Dict
 
 class Recipe:
     def __init__(self, ingredients_d:dict, products_d:dict, time:float, recipe_name:str):
@@ -43,7 +43,7 @@ class Recipe:
                 val += f" {item}-{count},"
         return val[:-1] + '>'
 
-    def get_products_per_minute_d(self) -> Dict[str, Union[int, float]]:
+    def get_products_per_minute_d(self) -> Dict[str, float]:
         """
         How much of everything is produced per minute
 
@@ -53,7 +53,7 @@ class Recipe:
         """
         return {item: amount / (self.time / 60) for item, amount in self.products_d.items()}
 
-    def get_ingredients_per_minute_d(self) -> Dict[str, Union[int, float]]:
+    def get_ingredients_per_minute_d(self) -> Dict[str, float]:
         """
         How much of everything is consumed per minute
 
@@ -80,7 +80,7 @@ class ScalableRecipe(Recipe):
     Recipe with scalable inputs and outputs for ease of chaining.
     """
 
-    def __init__(self, parent_recipe: Recipe, scale: Union[float, int] = 1):
+    def __init__(self, parent_recipe: Recipe, scale: float = 1):
         """
         Initialize from a fixed recipe.
 
@@ -95,10 +95,10 @@ class ScalableRecipe(Recipe):
         )
         self._base_products_d = self.products_d.copy()
         self._base_ingredients_d = self.ingredients_d.copy()
-        self._scale: Union[int, float]
-        self.scale = scale
+        self._scale: float
+        self.scale = scale  # property, assigns to self._scale
 
-    def normalize_for_item(self, item: str, per_minute: Union[float, int] = 1, consume: bool = False) -> None:
+    def normalize_for_item(self, item: str, per_minute: float = 1, consume: bool = False) -> None:
         """
         Set scale such that per_minute items are produced/consumed per minute
 
@@ -116,7 +116,7 @@ class ScalableRecipe(Recipe):
         default_per_minute = (positive_d[item] - negative_d.get(item, 0)) * 60 / self.time
         self.scale = per_minute / default_per_minute
 
-    def scale_to_ingredients_per_min_d(self, ingredients_per_min_d: Dict[str, Union[float, int]]) -> None:
+    def scale_to_ingredients_per_min_d(self, ingredients_per_min_d: Dict[str, float]) -> None:
         """
         scale recipe to satisfy all
 
@@ -163,7 +163,5 @@ class ScalableRecipe(Recipe):
             val += f"    {item}: {count}\n"
         return val
 
-def format_num(num: Union[int, float]) -> str:
-    if isinstance(num, int):
-        return str(num)
+def format_num(num: float) -> str:
     return f'{num:0.2f}'

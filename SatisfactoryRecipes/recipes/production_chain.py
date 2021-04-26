@@ -1,7 +1,7 @@
 """
 This file contains classes that can scale recipes and track stuff
 """
-from typing import Optional, Dict, Union, Collection
+from typing import Optional, Dict, Collection
 
 from . import recipe_classes as rc
 from . import constants as cons
@@ -11,7 +11,7 @@ class ProductionChain:
     """
     The whole chain.
     """
-    def __init__(self, desired_products_per_min_d:Optional[Dict[str, Union[int, float]]] = None):
+    def __init__(self, desired_products_per_min_d:Optional[Dict[str, float]] = None):
         # self.item = item
         # self._goal_amount_per_min = goal_amount_per_min # do not change this directly, or scaling will not work
         if desired_products_per_min_d is None:
@@ -121,7 +121,7 @@ class ProductionChain:
         if recipe_name in self.active_name_to_recipes_d:
             del self.active_name_to_recipes_d[recipe_name]
 
-    def multiply_full_chain(self, factor: Union[int, float]):
+    def multiply_full_chain(self, factor: float):
         """
         multiply all recipes in the chain by factor
 
@@ -132,13 +132,13 @@ class ProductionChain:
         for scalable_recipe in self.active_name_to_recipes_d.values():
             scalable_recipe.scale *= factor
 
-    def multiply_desired_amounts(self, factor: Union[int, float]):
+    def multiply_desired_amounts(self, factor: float):
         self._desired_products_per_min_d = {
             key: value * factor
             for key, value in self._desired_products_per_min_d.items()
         }
 
-    def rescale_single_recipe(self, recipe_name: str, new_scale: Union[None, int, float] = None):
+    def rescale_single_recipe(self, recipe_name: str, new_scale: Optional[float] = None):
         """
         set the scale for a particular recipe (do nothing if that recipe is not in use
 

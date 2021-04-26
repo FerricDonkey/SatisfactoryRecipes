@@ -47,24 +47,30 @@ PRODUCES_KEY = 'mProduct'
 TIME_KEY = 'mManufactoringDuration'
 BUILD_IN_KEY = 'mProducedIn'
 
-def parse_ingredients_product_str(data:str, rename_d:dict) -> typing.Optional[typing.Dict[str, int]]:
-    data = data.split(r'"')[1:]
-    # key error will happen for building recipes, which I don't care about
-    try:
-        parsed_d = dict((
-            (thing.split('.')[-1], int(amount.split('=')[1].split(')')[0]) )
-            for thing, amount in zip(data[:-1:2], data[1::2])
-        ))
-        parsed_d = {rename_d.get(key, key): val for key, val in parsed_d.items()}
-        return parsed_d
-    except KeyError:
-        return None
+MATTER_STATE_KEY = "mForm"
+IS_LIQUID_VAL = "RF_LIQUID"
 
 
+def get_liquid_raw_names(data:typing.Optional[typing.Sequence] = None) -> typing.FrozenSet[str]:
+    if data is None:
+        with open(DOC_FILE, encoding = 'utf16') as fin:
+            data = json.load(fin)
+
+    return frozenset(
+        thing.get(CLASS_NAME_KEY, None)
+        for grouped_things in data
+        for thing in grouped_things.get(ACTUAL_VALUES_KEY, {})
+        if (
+            thing.get(CLASS_NAME_KEY, None)
+            and thing.get(MATTER_STATE_KEY, None) == IS_LIQUID_VAL
+        )
+    )
 
 def get_all_recipe_kwargs() -> typing.Tuple[dict,...]:
     with open(DOC_FILE, encoding = 'utf16') as fin:
         data = json.load(fin)
+
+    liquids = get_liquid_raw_names(data)
 
     raw_recipes_l = (
         r
@@ -74,8 +80,8 @@ def get_all_recipe_kwargs() -> typing.Tuple[dict,...]:
     item_name_translation_d = get_item_translation_d(data)
     all_recipe_kwargs = (
         {
-            'ingredients_d': parse_ingredients_product_str(raw_d[INGREDIENTS_KEY], item_name_translation_d),
-            'products_d': parse_ingredients_product_str(raw_d[PRODUCES_KEY], item_name_translation_d),
+            'ingredients_d': _parse_ingredients_product_str(raw_d[INGREDIENTS_KEY], item_name_translation_d, liquids),
+            'products_d': _parse_ingredients_product_str(raw_d[PRODUCES_KEY], item_name_translation_d, liquids),
             'time': float(raw_d[TIME_KEY]),
             'recipe_name': raw_d[PRINTABLE_NAME_KEY],
         }
@@ -83,6 +89,23 @@ def get_all_recipe_kwargs() -> typing.Tuple[dict,...]:
     )
 
     return tuple(r for r in all_recipe_kwargs if r['products_d'] is not None)  # filter out bad recipes (buildings)
+
+
+def _parse_ingredients_product_str(data:str, rename_d:dict, liquids:typing.FrozenSet = frozenset()) -> typing.Optional[typing.Dict[str, int]]:
+    data = data.split(r'"')[1:]
+    # key error will happen for building recipes, which I don't care about
+    try:
+        parsed_d = dict((
+            (thing.split('.')[-1], int(amount.split('=')[1].split(')')[0]) )
+            for thing, amount in zip(data[:-1:2], data[1::2])
+        ))
+        parsed_d = {
+            rename_d.get(key, key): (val if key not in liquids else val/1000)  # liquids are stored higher precision
+            for key, val in parsed_d.items()
+        }
+        return parsed_d
+    except KeyError:
+        return None
 
 
 def get_raw_data_section(all_data:typing.Sequence[dict], search_val:str) -> typing.Optional[typing.List[dict]]:
