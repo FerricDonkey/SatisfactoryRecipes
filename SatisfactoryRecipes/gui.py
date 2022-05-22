@@ -1,3 +1,4 @@
+import math
 import sys
 
 from typing import Union, Dict, Optional
@@ -260,7 +261,10 @@ class RequiredIngredientsPane(qwid.QVBoxLayout):
         if self.parent.production_chain:
             # recall this is a property, so best to snapshot (at least until I get around to caching the property)
             ingredients_per_minute = self.parent.production_chain.get_ingredients_per_minute_d().items()
-            for index, (ingredient, per_minute) in enumerate(ingredients_per_minute):
+            for index, (ingredient, per_minute) in enumerate(
+                entry for entry in ingredients_per_minute if not math.isclose(entry[1], 0)
+            ):
+                # if math.isclose(per_minute, 0): continue
                 NewPaneClass = RawResourcePane if ingredient in cons.RAW_RESOURCES else CompositeResourcePane
                 self.ingredient_container_layout.addLayout(
                     NewPaneClass(parent = self.parent, item = ingredient, per_minute = per_minute)
@@ -441,9 +445,9 @@ class RecipePane(qwid.QVBoxLayout):
         self.addLayout(hlayout)
 
         grid = qwid.QGridLayout()
-        grid.addWidget(FLabel('Produces:'), 0, 0, 1, 3)
+        grid.addWidget(FLabel('Produces (per min):'), 0, 0, 1, 3)
         # vertical line between these two
-        grid.addWidget(FLabel('Consumes:'), 0, 4, 1, 3)
+        grid.addWidget(FLabel('Consumes (per min):'), 0, 4, 1, 3)
         grid.addWidget(FLabel('  '), 1, 0) # spacing
         grid.addWidget(FLabel('  '), 1, 4)
 

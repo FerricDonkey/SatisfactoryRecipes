@@ -17,6 +17,8 @@ if not DOC_FILE.exists():
         "or teach the code where yours lives."
     )
 
+print(DOC_FILE)
+
 THING_FINDER_KEY = "NativeClass"
 class FINDER:
     Recipe = "Class'/Script/FactoryGame.FGRecipe'"
