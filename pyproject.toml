@@ -1,16 +1,19 @@
 [project]
 name = "satisfactory-recipes"
-version = "0.1.0"
-description = "Add your description here"
+version = "0.2.0"
+description = "A calculator for "
 readme = "README.md"
 authors = [
     { name = "Jacob Suggs", email = "jacob.suggs@gmail.com" }
 ]
 requires-python = ">=3.14"
-dependencies = []
+dependencies = [
+    "platformdirs>=4.10.0",
+    "pydantic>=2.13.4",
+]
 
 [project.scripts]
-satisfactory-recipes = "satisfactory_recipes:main"
+satisfactory-recipes = "satisfactory_recipes.__main__:main"
 
 [build-system]
 requires = ["uv_build>=0.9.17,<0.10.0"]
@@ -18,5 +21,6 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    "ipython>=9.14.1",
     "pytest>=9.1.0",
 ]

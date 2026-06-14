@@ -2,303 +2,64 @@
 Contains basic classes for things like recipes, items, buildings
 """
 
-import collections.abc as cabc
+import abc
 import dataclasses
+import enum
 import json
-import numbers
 import pathlib
-import statistics
 import sys
 import typing as ty
 from functools import cached_property
 
-DOCS_PATH = pathlib.Path(__file__).parent / "docs.json"
+from satisfactory_recipes import stupid_classes as sc
 
-
-class StupidFrozenDict[K, V](dict[K, V]):
-    def __init__(
-        self,
-        mapping: cabc.Mapping[K, V] | cabc.Iterable[tuple[K, V]] = (),
-        /,
-        **kwargs: V,
-    ) -> None:
-        self._frozen = False
-        super().__init__(mapping, **kwargs)
-
-        for key, value in tuple(self.items()):
-            self[key] = self._freeze_value(value)
-
-        self._frozen = True
-
-    @classmethod
-    def _freeze_value(cls, value: ty.Any) -> ty.Any:
-        if isinstance(value, list):
-            return tuple(value)  # type: ignore
-        if isinstance(value, set):
-            return frozenset(value)  # type: ignore
-        if isinstance(value, dict):
-            return cls(value)  # type: ignore
-        return value
-
-    def __setitem__(self, key: K, value: V) -> None:
-        if self._frozen:
-            raise TypeError("NOOOO. Not allowed. That's the whole point")
-        super().__setitem__(key, value)
-
-    def __hash__(self) -> int:  # type: ignore
-        return hash(tuple(sorted(self.items())))
-
-
-class ScalableCounter[T](dict[T, float]):
-    """
-    Dictionary-like counter whose missing values default to 0.0.
-
-    Supports addition/subtraction with mappings and multiplication/division
-    by real numbers. Can be frozen for hashability.
-    """
-
-    def __init__(
-        self,
-        mapping: cabc.Mapping[T, float] | cabc.Iterable[tuple[T, float]] = (),
-        /,
-        *,
-        frozen: bool = False,
-        **kwargs: float,
-    ) -> None:
-        super().__init__(mapping, **kwargs)
-        self._frozen: bool = frozen
-        self._hash: int | None = None
-
-    def __missing__(self, key: T) -> float:
-        if self._frozen:
-            # Do not mutate a frozen counter just because someone read a missing key.
-            return 0.0
-
-        self[key] = 0.0
-        return 0.0
-
-    @property
-    def frozen(self) -> bool:
-        return self._frozen
-
-    def freeze(self) -> ty.Self:
-        self._frozen = True
-        self._hash = None
-        return self
-
-    def unfrozen_copy(self) -> ty.Self:
-        return type(self)(self.items())
-
-    def frozen_copy(self) -> ty.Self:
-        return type(self)(self.items(), frozen=True)
-
-    def __setitem__(self, key: T, value: float) -> None:
-        if self._frozen:
-            raise TypeError(f"Called __setitem__ from frozen {type(self).__name__}")
-        self._hash = None
-        super().__setitem__(key, value)
-
-    def __delitem__(self, key: T) -> None:
-        if self._frozen:
-            raise TypeError(f"Called __delitem__ from frozen {type(self).__name__}")
-        self._hash = None
-        super().__delitem__(key)
-
-    def clear(self) -> None:
-        if self._frozen:
-            raise TypeError(f"Called clear from frozen {type(self).__name__}")
-        self._hash = None
-        super().clear()
-
-    def pop(self, key: T, default: object = ty.cast(object, ...)) -> float:
-        if self._frozen:
-            raise TypeError(f"Called pop from frozen {type(self).__name__}")
-        self._hash = None
-
-        if default is ...:
-            return super().pop(key)
-
-        return super().pop(key, ty.cast(float, default))
-
-    def popitem(self) -> tuple[T, float]:
-        if self._frozen:
-            raise TypeError(f"Called popitem from frozen {type(self).__name__}")
-        self._hash = None
-        return super().popitem()
-
-    def update(self, *args: object, **kwargs: float) -> None:
-        if self._frozen:
-            raise TypeError(f"Called update from frozen {type(self).__name__}")
-        self._hash = None
-        super().update(*args, **kwargs)  # type: ignore[arg-type]
-
-    def setdefault(self, key: T, default: float = 0.0) -> float:
-        if self._frozen:
-            raise TypeError(f"Called setdefault from frozen {type(self).__name__}")
-        self._hash = None
-        return super().setdefault(key, default)
-
-    def __hash__(self) -> int:
-        if not self._frozen:
-            raise TypeError(
-                f"Called __hash__ from non-frozen {type(self).__name__} {self}. "
-                "You can freeze first with thing.freeze()."
-            )
-
-        if self._hash is None:
-            self._hash = hash(tuple(sorted(self.items())))
-
-        return self._hash
-
-    def __add__(self, other: cabc.Mapping[T, float]) -> ty.Self:
-        summed = self.unfrozen_copy()
-        summed += other
-        return summed
-
-    def __iadd__(self, other: cabc.Mapping[T, float]) -> ty.Self:
-        self._check_mutable_for_inplace()
-
-        for key, val in other.items():
-            self[key] += val
-
-        return self
-
-    def __sub__(self, other: cabc.Mapping[T, float]) -> ty.Self:
-        subbed = self.unfrozen_copy()
-        subbed -= other
-        return subbed
-
-    def __isub__(self, other: cabc.Mapping[T, float]) -> ty.Self:
-        self._check_mutable_for_inplace()
-
-        for key, val in other.items():
-            self[key] -= val
-
-        return self
-
-    def __mul__(self, scale: numbers.Real) -> ty.Self:
-        scaled = self.unfrozen_copy()
-        scaled *= scale
-        return scaled
-
-    def __rmul__(self, scale: numbers.Real) -> ty.Self:
-        return self * scale
-
-    def __imul__(self, scale: numbers.Real) -> ty.Self:
-        self._check_mutable_for_inplace()
-        self._check_scale(scale, "*")
-
-        for key in tuple(self):
-            self[key] *= float(scale)
-
-        return self
-
-    def __truediv__(self, scale: numbers.Real) -> ty.Self:
-        scaled = self.unfrozen_copy()
-        scaled /= scale
-        return scaled
-
-    def __itruediv__(self, scale: numbers.Real) -> ty.Self:
-        self._check_mutable_for_inplace()
-        self._check_scale(scale, "/")
-
-        for key in tuple(self):
-            self[key] /= float(scale)
-
-        return self
-
-    def _check_mutable_for_inplace(self) -> None:
-        if self._frozen:
-            raise TypeError(
-                f"inplace operations not supported for frozen {type(self).__name__}"
-            )
-
-    @staticmethod
-    def _check_scale(scale: object, op: str) -> None:
-        if not isinstance(scale, numbers.Real):
-            raise TypeError(
-                f"Unsupported operation {op} with scale of type {type(scale).__name__}"
-            )
-
-
-def _un_camel(camel_str: str) -> str:
-    chars = []
-    for c in camel_str:
-        if c == c.lower():
-            chars.append(c)
-        else:
-            chars.append(f"_{c.lower()}")
-    return "".join(chars)
+DOCS_PATH = pathlib.Path(
+    "E:/SteamLibrary/steamapps/common/Satisfactory/CommunityResources/Docs/en-us.json"
+)
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True, slots=True, order=True)
-class _BaseInfo:
-    key_name: str
-    class_name: str
-
-    _FIELD_NAME_TRANSLATION_D: ty.ClassVar[dict[str, str]] = {}
-    _FIELD_VALUE_TRANSLATION_D: ty.ClassVar[dict[str, ty.Callable]] = {}
+class _BaseInfo(abc.ABC):
+    class_name: str  # Used as key in dictionaries
 
     @classmethod
-    def from_dict(cls, key_name: str, in_dict: dict[str, ty.Any]) -> ty.Self:
-        existent_fields = set(field.name for field in dataclasses.fields(cls))
-        kwargs = {}
-        for key, value in in_dict.items():
-            field_name = cls._FIELD_NAME_TRANSLATION_D.get(
-                key
-            )  # TODO: ERROR CHECKING HERE
-            if field_name is None:
-                field_name = _un_camel(key)
-            if field_name in existent_fields:
-                value_translator = cls._FIELD_VALUE_TRANSLATION_D.get(
-                    field_name, lambda x: x
-                )
-                kwargs[field_name] = value_translator(value)
-
+    def from_dict(cls, in_dict: dict[str, str]) -> ty.Self:
+        """Load from a dictionary."""
         try:
-            info = cls(
-                key_name=key_name,
-                **kwargs,
-            )
+            return cls._from_dict_impl(in_dict)
         except Exception as exc:
             raise RuntimeError(
-                f"Could not load {cls.__name__} from:\n{json.dumps(in_dict, indent=2)}"
+                f"Error processings:\n{json.dumps(in_dict, indent=2)}"
             ) from exc
 
-        return info
+    @classmethod
+    @abc.abstractmethod
+    def _from_dict_impl(cls, in_dict: dict[str, str]) -> ty.Self:
+        """Load from a dictionary."""
+        raise NotImplementedError()
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True, slots=True, order=True)
 class Building(_BaseInfo):
-    _FIELD_NAME_TRANSLATION_D: ty.ClassVar[dict[str, str]] = {
-        "powerUsedRecipes": "power_used_data",
-        "powerUsed": "power_used_data",
-    }
-    _FIELD_VALUE_TRANSLATION_D: ty.ClassVar[dict[str, ty.Callable]] = {
-        "power_used_data": lambda power_data: (
-            power_data
-            if not isinstance(power_data, dict)
-            else StupidFrozenDict(power_data)
-        )
-    }
+    """
+    Information about buildings.
+
+    Note that Particle Accelerators and similar variable length power buildings have a power
+    draw of 0, and the recipes come with power draw.
+    """
 
     name: str
     category: str
-    power_used_data: int | dict[str, tuple[int]] | None = None
+    power_draw: float  # NOTE: some recipes ADD power
 
-    def get_mean_power(self, recipe_key_name: str) -> int:
-        """
-        Mean power used by a recipe, specified by "key_name
-        """
-        if self.power_used_data is None:
-            raise TypeError(
-                f"Building {self.name} ({self.key_name}, {self.category=}) does not use power"
-            )
-
-        if isinstance(self.power_used_data, int):
-            return self.power_used_data
-        else:
-            return statistics.mean(self.power_used_data[recipe_key_name])
+    @classmethod
+    def _from_dict_impl(cls, in_dict: dict[str, str]) -> ty.Self:
+        return cls(
+            class_name=in_dict["ClassName"],
+            name=in_dict["mDisplayName"],
+            category="<<PLACEHOLDER-FIX-THIS>>",
+            power_draw=float(in_dict["mPowerConsumption"]),
+        )
 
     @property
     def is_workstation(self) -> bool:
@@ -309,42 +70,127 @@ class Building(_BaseInfo):
         return self.category == "extraction"
 
 
+class MatterState(enum.StrEnum):
+    SOLID = enum.auto()
+    GAS = enum.auto()
+    LIQUID = enum.auto()
+
+    @staticmethod
+    def from_doc_form(doc_form: str) -> MatterState:
+        return {
+            "RF_SOLID": MatterState.SOLID,
+            "RF_GAS": MatterState.GAS,
+            "RF_LIQUID": MatterState.LIQUID,
+        }[doc_form]
+
+
 @dataclasses.dataclass(frozen=True, kw_only=True, slots=True, order=True)
 class Item(_BaseInfo):
     name: str
-    category: str
-    stack: int | None = None  # fluids don't have stack
-    resource_sink_points: int = 0
+    matter_state: str
+    stack_size: int | None  # fluids don't have stack
+    resource_sink_points: int
 
     @property
     def is_liquid(self) -> bool:
-        return self.category == "liquid"
+        return self.matter_state == "liquid"
 
     @property
     def is_gas(self) -> bool:
-        return self.category == "gas"
+        return self.matter_state == "gas"
 
     @property
     def is_fluid(self) -> bool:
         return self.is_gas or self.is_liquid
 
+    @classmethod
+    def _from_dict_impl(cls, in_dict: dict[str, str]) -> ty.Self:
+        """Load from a dictionary."""
+        matter_state = MatterState.from_doc_form(in_dict["mForm"])
+        try:
+            stack_size = int(in_dict["mCachedStackSize"])
+        except ValueError:
+            stack_size = 0
+
+        return cls(
+            class_name=in_dict["ClassName"],
+            name=in_dict["mDisplayName"],
+            matter_state=matter_state,
+            stack_size=stack_size,
+            resource_sink_points=int(in_dict.get("mResourceSinkPoints", 0)),
+        )
+
 
 @dataclasses.dataclass(frozen=True, kw_only=True, slots=True, order=True)
-class _RecipeBase(_BaseInfo):
+class RecipeRaw(_BaseInfo):
     """
-    Intermediate class for Recipe as read from
-    """
+    Intermediate class for Recipe as read from data.
 
-    _FIELD_NAME_TRANSLATION_D: ty.ClassVar[dict[str, str]] = {
-        "mManufactoringDuration": "craft_time",
-        "mProducedIn": "produced_in",
-    }
+    NOTE: mean_power_draw will be 0 for most recipes, and non-zero for
+          things made in the particle accelerator, etc. For best results,
+          add power draw from building and recipe.
+    """
 
     name: str
-    ingredients: dict[str, float]
-    produce: dict[str, float]
-    produced_in: list[str] = dataclasses.field(default_factory=list)
+    ingredients: dict[str, int]
+    products: dict[str, int]
+    produced_in: list[str]
     craft_time: float
+    mean_power_draw: float
+
+    @staticmethod
+    def parse_item_counts(items_str: str) -> dict[str, int]:
+        """
+        Take the mIngredients/mProducts string (or similar), convert to dictionary.
+
+        Example str: "((ItemClass=\"/Script/Engine.BlueprintGeneratedClass'/Game/FactoryGame/Resource/Parts/IronIngot/Desc_IronIngot.Desc_IronIngot_C'\",Amount=3))"
+        """
+        items_str = items_str[1:-1]
+        item_strs = [val.strip("()") for val in items_str.split("),(")]
+        out_d: dict[str, int] = {}
+        for item_str in item_strs:
+            if not item_str:
+                continue
+            try:
+                key_part, amount_part = item_str.split(",")
+            except Exception:
+                raise RuntimeError(f"Parse Error:\n    {items_str=}\n    {item_str=}\n")
+            amount = int(amount_part.split("=")[1])
+
+            key_part = key_part.split("=")[1]
+            key = key_part.split(".")[-1].rstrip("\"'")
+            out_d[key] = amount
+
+        return out_d
+
+    @staticmethod
+    def parse_produced_in(produced_in_str: str) -> list[str]:
+        """
+        Take the mProducedIn string (or similar), convert to list of building keys.
+
+        Example str: "(\"/Game/FactoryGame/Buildable/Factory/ConstructorMk1/Build_ConstructorMk1.Build_ConstructorMk1_C\",\"/Game/FactoryGame/Buildable/-Shared/WorkBench/BP_WorkBenchComponent.BP_WorkBenchComponent_C\",\"/Script/FactoryGame.FGBuildableAutomatedWorkBench\")"
+        """
+        pieces = produced_in_str.split(",")
+        return [piece.split(".")[-1].strip("()\"'") for piece in pieces]
+
+    @classmethod
+    def _from_dict_impl(cls, in_dict: dict[str, str]) -> ty.Self:
+        """Load from a dictionary."""
+        # I think mean_power_draw is correct - the names make no sense, but they match
+        # what I see for recipes.
+        mean_power_draw = (
+            2 * float(in_dict.get("mVariablePowerConsumptionConstant", 0))
+            + float(in_dict.get("mVariablePowerConsumptionFactor", 0))
+        ) / 2
+        return cls(
+            class_name=in_dict["ClassName"],
+            name=in_dict["mDisplayName"],
+            ingredients=cls.parse_item_counts(in_dict["mIngredients"]),
+            products=cls.parse_item_counts(in_dict["mProduct"]),
+            produced_in=cls.parse_produced_in(in_dict["mProducedIn"]),
+            craft_time=float(in_dict["mManufactoringDuration"]),
+            mean_power_draw=mean_power_draw,
+        )
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True, slots=True, order=True)
@@ -352,21 +198,26 @@ class Recipe(_BaseInfo):
     _FLUID_REDUCTION_FACTOR: ty.ClassVar[int] = 1000
 
     name: str
-    consume: ScalableCounter[Item]
-    consume_per_min: ScalableCounter[Item]
-    produce: ScalableCounter[Item]
-    produce_per_min: ScalableCounter[Item]
+    consume: sc.ScalableCounter[Item]
+    consume_per_min: sc.ScalableCounter[Item]
+    products: sc.ScalableCounter[Item]
+    produce_per_min: sc.ScalableCounter[Item]
     produced_in: Building | None
     craft_time: float
+    _variable_part_mean_power_draw: float  # From raw recipe, for variable things only
 
     @property
     def mean_power(self) -> float:
+        # Certain fixmas items are weird
         if self.produced_in is None:
             return 0
-        try:
-            return self.produced_in.get_mean_power(self.key_name)
-        except Exception as exc:
-            raise TypeError(f'Power error in recipe: "{self.name}"') from exc
+
+        # TODO: Make more idiomatic. Basically, buildings set their power to 0
+        #       if they should use the recipe power.
+        if self.produced_in.power_draw > 0:
+            return self.produced_in.power_draw
+
+        return self._variable_part_mean_power_draw
 
     def make_pretty_str(self, indent: int = 0, scale: float | None = None) -> str:
         if scale is not None:
@@ -377,7 +228,7 @@ class Recipe(_BaseInfo):
         for item, per_min in self.produce_per_min.items():
             if scale is not None:
                 per_min *= scale
-            per_craft = self.produce[item]
+            per_craft = self.products[item]
             desc += f"\n      - {item.name} x {per_craft:.1f} ({per_min:.3f}/min)"
 
         desc += "\n    Consume:"
@@ -409,7 +260,7 @@ class Recipe(_BaseInfo):
     @classmethod
     def from_base_recipe(
         cls,
-        base_recipe: _RecipeBase,
+        base_recipe: RecipeRaw,
         class_name_to_item_d: dict[str, Item],
         class_name_to_building_d: dict[str, Building],
     ) -> ty.Self:
@@ -427,14 +278,15 @@ class Recipe(_BaseInfo):
 
         """
 
-        def convert_item_d(item_d: dict[Item, float]) -> ScalableCounter[Item]:
-            new_d = ScalableCounter()
+        def convert_item_d(item_d: dict[str, float]) -> sc.ScalableCounter[Item]:
+            """Given dictionary of item keys to counts, make dictionary from Item objects to counts."""
+            new_d = sc.ScalableCounter[Item]()
             for class_name, amount in item_d.items():
                 item = class_name_to_item_d[class_name]
                 if item.is_fluid:
                     amount /= cls._FLUID_REDUCTION_FACTOR
                 new_d[item] = amount
-            new_d.frozen = True
+            new_d.freeze()
             return new_d
 
         buildings = [
@@ -452,23 +304,30 @@ class Recipe(_BaseInfo):
                 f"stations, but got {buildings=}"
             )
 
-        produce = convert_item_d(base_recipe.produce)
+        produce = convert_item_d(base_recipe.products)
         consume = convert_item_d(base_recipe.ingredients)
         consume_per_min = consume * (60 / base_recipe.craft_time)
         produce_per_min = produce * (60 / base_recipe.craft_time)
-        consume_per_min.frozen = True
-        produce_per_min.frozen = True
+        consume_per_min.freeze()
+        produce_per_min.freeze()
 
         return cls(
-            key_name=base_recipe.key_name,
             class_name=base_recipe.class_name,
             name=base_recipe.name,
             consume=consume,
             consume_per_min=consume_per_min,
-            produce=produce,
+            products=produce,
             produce_per_min=produce_per_min,
             produced_in=buildings[0] if buildings else None,
             craft_time=base_recipe.craft_time,
+            _variable_part_mean_power_draw=base_recipe.mean_power_draw,
+        )
+
+    @classmethod
+    def _from_dict_impl(cls, in_dict: dict[str, str]) -> ty.Self:
+        raise RuntimeError(
+            "Do not construct Recipe from dictionary - instead construct "
+            "RecipeRaw, and build recipes from that"
         )
 
 
@@ -483,33 +342,47 @@ class GameData:
         """
         Load from docs.json file
         """
-
-        with open(docs_json) as fin:
+        with open(docs_json, "rb") as fin:
             all_data = json.load(fin)
 
+        buildings_src: list[dict[str, str]] = []
+        recipe_src: list[dict[str, str]] = []
+        item_src: list[dict[str, str]] = []
+
+        native_class_to_srcs = {
+            "/Script/CoreUObject.Class'/Script/FactoryGame.FGItemDescriptor'": item_src,
+            "/Script/CoreUObject.Class'/Script/FactoryGame.FGResourceDescriptor'": item_src,
+            "/Script/CoreUObject.Class'/Script/FactoryGame.FGItemDescriptorNuclearFuel'": item_src,
+            "/Script/CoreUObject.Class'/Script/FactoryGame.FGRecipe'": recipe_src,
+            "/Script/CoreUObject.Class'/Script/FactoryGame.FGBuildableManufacturerVariablePower'": buildings_src,
+            "/Script/CoreUObject.Class'/Script/FactoryGame.FGBuildableManufacturer'": buildings_src,
+        }
+
+        for junk_d in all_data:
+            dest_l = native_class_to_srcs.get(junk_d["NativeClass"])
+            if dest_l is None:
+                continue
+            dest_l.extend(junk_d["Classes"])
+
         buildings_d = {
-            key_name: Building.from_dict(
-                key_name=key_name,
-                in_dict=building_d,
+            src_d["ClassName"]: Building.from_dict(
+                in_dict=src_d,
             )
-            for key_name, building_d in all_data["buildingsData"].items()
+            for src_d in buildings_src
         }
 
         items_d = {
-            key_name: Item.from_dict(
-                key_name=key_name,
-                in_dict=building_d,
+            src_d["ClassName"]: Item.from_dict(
+                in_dict=src_d,
             )
-            for source in (all_data["itemsData"], all_data["toolsData"])
-            for key_name, building_d in source.items()
+            for src_d in item_src
         }
 
         recipes_base = {
-            key_name: _RecipeBase.from_dict(
-                key_name=key_name,
-                in_dict=building_d,
+            src_d["ClassName"]: RecipeRaw.from_dict(
+                in_dict=src_d,
             )
-            for key_name, building_d in all_data["recipesData"].items()
+            for src_d in recipe_src
         }
 
         class_name_to_item_d = {item.class_name: item for item in items_d.values()}
@@ -526,7 +399,7 @@ class GameData:
             for key_name, base_recipe in recipes_base.items()
             if all(
                 item_cn in class_name_to_item_d
-                for source in (base_recipe.produce, base_recipe.ingredients)
+                for source in (base_recipe.products, base_recipe.ingredients)
                 for item_cn in source
             )
         }
@@ -542,7 +415,7 @@ class GameData:
         return frozenset(
             item
             for recipe in self.recipes_d.values()
-            for item in recipe.produce
+            for item in recipe.products
             if recipe.produced_in
         )
 
@@ -564,5 +437,5 @@ class GameData:
         return [
             recipe
             for recipe in self.recipes_d.values()
-            if (item in recipe.produce and recipe.produced_in)
+            if (item in recipe.products and recipe.produced_in)
         ]

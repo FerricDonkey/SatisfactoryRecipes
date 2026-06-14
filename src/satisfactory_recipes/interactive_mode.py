@@ -10,11 +10,13 @@ from . import info_classes as ic
 from . import production_chain as pc
 
 MAX_DISPLAY_OPTIONS = 10
-QUIT_COMMANDS = ('exit', 'quit')
-CANCEL_COMMANDS = ('cancel',)
+QUIT_COMMANDS = ("exit", "quit")
+CANCEL_COMMANDS = ("cancel",)
+
 
 class _SupportsName(ty.Protocol):
     name: str
+
 
 class _WeDoneException(Exception):
     """
@@ -22,6 +24,7 @@ class _WeDoneException(Exception):
 
     (entire thing should be wrapped in a try except that grabs this)
     """
+
 
 class _CancelException(Exception):
     """
@@ -31,6 +34,7 @@ class _CancelException(Exception):
     handles this. If an input cannot be canceled, suggest using exceptional_input
     with can_cancel=False
     """
+
 
 def exceptional_input(
     prompt: str,
@@ -43,32 +47,34 @@ def exceptional_input(
         if can_cancel:
             raise _CancelException()
         else:
-            print('Cannot Cancel.')
+            print("Cannot Cancel.")
             return exceptional_input(prompt, can_cancel=can_cancel)
 
     return value
 
 
-def get_path_no_exists(prompt:str) -> pathlib.Path:
+def get_path_no_exists(prompt: str) -> pathlib.Path:
     while True:
-        path = pathlib.Path(exceptional_input(f'{prompt}:'))
+        path = pathlib.Path(exceptional_input(f"{prompt}:"))
         if path.exists():
             print(f"Can't use {path}, that exists and we don't overwrite things")
             continue
         return path
 
-def get_path_exists(prompt:str) -> pathlib.Path:
+
+def get_path_exists(prompt: str) -> pathlib.Path:
     while True:
-        path = pathlib.Path(exceptional_input(f'{prompt}:'))
+        path = pathlib.Path(exceptional_input(f"{prompt}:"))
         if not path.exists():
             print(f"{path} does not exist")
             continue
         return path
 
-def get_positive_float(prompt:str) -> float:
+
+def get_positive_float(prompt: str) -> float:
     while True:
         try:
-            value = float(exceptional_input(f'{prompt}: '))
+            value = float(exceptional_input(f"{prompt}: "))
         except ValueError:
             continue
         if value > 0:
@@ -81,13 +87,16 @@ def _cancelable_decorator[**P](func: ty.Callable[P, None]) -> ty.Callable[P, Non
 
     ONLY USE IF CancelException WILL ONLY BE RAISED AT TIMES WHEN THIS IS OK.
     """
+
     @functools.wraps(func)
     def wrapped(*args: P.args, **kwargs: P.kwargs) -> None:
         try:
             return func(*args, **kwargs)
         except _CancelException:
             return None
+
     return wrapped
+
 
 def choose_bounded_int(
     prompt: str,
@@ -102,23 +111,24 @@ def choose_bounded_int(
     """
     while True:
         try:
-            index = int(exceptional_input(f'{prompt}: '))
+            index = int(exceptional_input(f"{prompt}: "))
         except ValueError:
             continue
         if lower <= index < upper:
             return index
 
+
 def choose_named[T: _SupportsName](
     items: ty.Iterable[T],
-    prompt: str = 'Choose an option',
+    prompt: str = "Choose an option",
 ) -> T:
-    sorted_items = sorted(items, key = lambda thing: thing.name.lower())
-    print(f'{prompt}:')
-    index_len = len(f'{len(sorted_items)-1}')
+    sorted_items = sorted(items, key=lambda thing: thing.name.lower())
+    print(f"{prompt}:")
+    index_len = len(f"{len(sorted_items) - 1}")
     for index, item in enumerate(sorted_items):
-        print(f'    {index:>{index_len}} - {item.name}')
+        print(f"    {index:>{index_len}} - {item.name}")
 
-    chosen_index = choose_bounded_int('Select index', 0, len(sorted_items))
+    chosen_index = choose_bounded_int("Select index", 0, len(sorted_items))
     return sorted_items[chosen_index]
 
 
@@ -126,7 +136,8 @@ def _match_score(target: str, key: str) -> int:
     """
     How much key matches target. Higher is better
     """
-    def mini_score(targ:str, k:str) -> int:
+
+    def mini_score(targ: str, k: str) -> int:
         score = 0
         for c1, c2 in zip(targ, k):
             if c1.lower() != c2.lower():
@@ -137,8 +148,9 @@ def _match_score(target: str, key: str) -> int:
     scores = []
     while target:
         scores.append(mini_score(target, key))
-        target = ' '.join(target.split()[1:])
+        target = " ".join(target.split()[1:])
     return max(scores)
+
 
 def _sort_options(options: ty.Iterable[str], entry: str) -> list[str]:
     # NOTE: better matches first
@@ -147,14 +159,16 @@ def _sort_options(options: ty.Iterable[str], entry: str) -> list[str]:
             -(option.lower() == entry.lower()),
             -(option.lower().startswith(entry.lower())),
             -_match_score(option, entry),
-            option
+            option,
         )
+
     return [opt for opt in sorted(options, key=key_func) if _match_score(opt, entry)]
+
 
 def get_arbitrary_item(
     game_data: ic.GameData,
     must_be_producible: bool,
-    prompt: str = 'Enter an item',
+    prompt: str = "Enter an item",
 ) -> ic.Item:
     if must_be_producible:
         item_name_d = game_data.producible_item_name_d
@@ -163,7 +177,7 @@ def get_arbitrary_item(
 
     options: list[str] = []
     while True:
-        item_name = exceptional_input(f'{prompt}: ')
+        item_name = exceptional_input(f"{prompt}: ")
         if not item_name:
             continue
         if item_name.isdigit():
@@ -180,10 +194,10 @@ def get_arbitrary_item(
         if options:
             print("Did you mean:")
             for index, option in enumerate(options[:MAX_DISPLAY_OPTIONS]):
-                print(f'{index} - {option}')
+                print(f"{index} - {option}")
             print()
 
-    assert False, 'unreachable code reached'
+    assert False, "unreachable code reached"
 
 
 @dataclasses.dataclass(kw_only=True, slots=True)
@@ -195,10 +209,10 @@ class InteractiveRunner:
     def add_recipe_for_shortage_item(self) -> None:
         items = self.production_chain.get_shortage_items()
         if not items:
-            print('No shortage items to add')
+            print("No shortage items to add")
             return
 
-        item = choose_named(items, 'Choose item to add recipe')
+        item = choose_named(items, "Choose item to add recipe")
         recipes = self.game_data.get_recipes_producing(item)
 
         recipes.sort(key=lambda r: r.name.lower())
@@ -220,12 +234,12 @@ class InteractiveRunner:
 
         print("Available Recipes\n===========================")
         for recipe in recipes:
-            recipe.print(indent = 4)
+            recipe.print(indent=4)
             print()
 
         recipe = choose_named(recipes)
         per_min = get_positive_float(
-            f'How many {self.production_chain.goal.name} per minute with this recipe'
+            f"How many {self.production_chain.goal.name} per minute with this recipe"
         )
         count = per_min / recipe.produce_per_min[self.production_chain.goal]
         self.production_chain.recipes[recipe] = count
@@ -235,14 +249,16 @@ class InteractiveRunner:
     @_cancelable_decorator
     def scale_item(self) -> None:
         if not self.production_chain.recipes:
-            print('Cannot scale before adding recipes')
+            print("Cannot scale before adding recipes")
             return
 
         item = choose_named(
-            items=self.production_chain.get_inolved_items(),
-            prompt='Chose item to scale',
+            items=self.production_chain.get_involved_items(),
+            prompt="Chose item to scale",
         )
-        amount = get_positive_float(f'Enter new amount of {item.name} to produce/consume')
+        amount = get_positive_float(
+            f"Enter new amount of {item.name} to produce/consume"
+        )
         self.production_chain.scale_item(item, amount)
 
     @_cancelable_decorator
@@ -255,22 +271,22 @@ class InteractiveRunner:
         del self.production_chain.recipes[recipe]
 
     def print_state(self) -> None:
-        print('\n')
+        print("\n")
         self.production_chain.print()
 
     @_cancelable_decorator
     def save(self) -> None:
-        path = get_path_no_exists('Enter path to save data')
+        path = get_path_no_exists("Enter path to save data")
         try:
             self.production_chain.save(path)
-            print(f'Saved to {path.resolve()}\n')
+            print(f"Saved to {path.resolve()}\n")
         except:
             traceback.print_exc()
-            print(f'\nCould not save to {path}. See above traceback for details')
+            print(f"\nCould not save to {path}. See above traceback for details")
 
     @_cancelable_decorator
     def load(self) -> None:
-        path = get_path_exists('Enter path to load data')
+        path = get_path_exists("Enter path to load data")
         try:
             new_chain = pc.ProductionChain.load(
                 filename=path,
@@ -278,7 +294,7 @@ class InteractiveRunner:
             )
         except Exception:
             traceback.print_exc()
-            print(f'\nCould not load {path}. See above traceback for details')
+            print(f"\nCould not load {path}. See above traceback for details")
 
         self.production_chain = new_chain
 
@@ -293,26 +309,36 @@ class InteractiveRunner:
             production_chain=pc.ProductionChain.load(
                 filename=filename,
                 game_data=game_data,
-            )
+            ),
         )
 
     @classmethod
     def from_goal_prompt(cls, game_data: ic.GameData) -> ty.Self:
+        goal = get_arbitrary_item(
+            game_data=game_data,
+            must_be_producible=True,
+            prompt="Choose Item to Produce",
+        )
+        return cls.from_starting_item(
+            game_data=game_data,
+            item=goal,
+        )
+
+    @classmethod
+    def from_starting_item(cls, game_data: ic.GameData, item: ic.Item) -> ty.Self:
+        """Create with a specified goal."""
+        assert item in game_data.producible_items
         return cls(
             game_data=game_data,
             production_chain=pc.ProductionChain(
-                goal=get_arbitrary_item(
-                    game_data=game_data,
-                    must_be_producible=True,
-                    prompt='Choose Item to Produce'
-                )
-            )
+                goal=item,
+            ),
         )
 
     def print_help(self) -> None:
         print("OPTIONS:")
         for option in self._DISPATCH_TABLE:
-            print(f'    {option}')
+            print(f"    {option}")
         print('\nType "quit" to quit. Type "cancel" during any command to cancel.\n')
 
     def mainloop(self) -> None:
@@ -332,24 +358,24 @@ class InteractiveRunner:
             pass
 
     _DISPATCH_TABLE: ty.ClassVar[dict[str, ty.Callable[[ty.Self], None]]] = {
-        'add-recipe-shortage': add_recipe_for_shortage_item,
-        'add-recipe-goal': add_goal_recipe,
-        'scale-item': scale_item,
-        'remove-recipe': remove_recipe,
-        'clear-recipes': clear_recipes,
-        'print': print_state,
-        'help': print_help,
-        'save': save,
-        'load': load,
+        "add-recipe-shortage": add_recipe_for_shortage_item,
+        "add-recipe-goal": add_goal_recipe,
+        "scale-item": scale_item,
+        "remove-recipe": remove_recipe,
+        "clear-recipes": clear_recipes,
+        "print": print_state,
+        "help": print_help,
+        "save": save,
+        "load": load,
     }
 
 
 def make_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description='Interactive production planner')
+    parser = argparse.ArgumentParser(description="Interactive production planner")
     parser.add_argument(
-        '--infile',
-        dest='filename',
-        help='- Existing file to load, if any',
+        "--infile",
+        dest="filename",
+        help="- Existing file to load, if any",
         default=None,
     )
 
@@ -366,16 +392,16 @@ def main(argv: ty.Sequence[str] | None = None):
     game_data = ic.GameData.from_json(ic.DOCS_PATH)
     try:
         if args.filename is None:
-            interactive_state = InteractiveRunner.from_goal_prompt(game_data)
+            runner = InteractiveRunner.from_goal_prompt(game_data)
         else:
-            interactive_state = InteractiveRunner.from_production_chain_file(
+            runner = InteractiveRunner.from_production_chain_file(
                 filename=args.filename,
                 game_data=game_data,
             )
-        interactive_state.mainloop()
+        runner.mainloop()
     except _WeDoneException:
         pass
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
