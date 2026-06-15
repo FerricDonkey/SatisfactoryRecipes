@@ -1,4 +1,5 @@
 import argparse
+import collections.abc as cabc
 import dataclasses
 import fractions as fr
 import functools
@@ -16,7 +17,8 @@ CANCEL_COMMANDS = ("cancel",)
 
 
 class _SupportsName(ty.Protocol):
-    name: str
+    @property
+    def name(self) -> str: ...
 
 
 class _WeDoneException(Exception):
@@ -120,17 +122,16 @@ def choose_bounded_int(
 
 
 def choose_named[T: _SupportsName](
-    items: ty.Iterable[T],
+    items: cabc.Sequence[T],
     prompt: str = "Choose an option",
 ) -> T:
-    sorted_items = sorted(items, key=lambda thing: thing.name.lower())
     print(f"{prompt}:")
-    index_len = len(f"{len(sorted_items) - 1}")
-    for index, item in enumerate(sorted_items):
+    index_len = len(f"{len(items) - 1}")
+    for index, item in enumerate(items):
         print(f"    {index:>{index_len}} - {item.name}")
 
-    chosen_index = choose_bounded_int("Select index", 0, len(sorted_items))
-    return sorted_items[chosen_index]
+    chosen_index = choose_bounded_int("Select index", 0, len(items))
+    return items[chosen_index]
 
 
 def _match_score(target: str, key: str) -> int:
@@ -146,7 +147,7 @@ def _match_score(target: str, key: str) -> int:
             score += 1
         return score
 
-    scores = []
+    scores: list[int] = []
     while target:
         scores.append(mini_score(target, key))
         target = " ".join(target.split()[1:])
@@ -183,7 +184,7 @@ def get_arbitrary_item(
             continue
         if item_name.isdigit():
             item_index = int(item_name)
-            if 0 <= item_index < len(options):
+            if 0 <= item_index < min(MAX_DISPLAY_OPTIONS, len(options)):
                 return game_data.item_name_d[options[item_index]]
             continue
 
@@ -213,10 +214,12 @@ class InteractiveRunner:
             print("No shortage items to add")
             return
 
-        item = choose_named(items, "Choose item to add recipe")
+        item = choose_named(
+            sorted(items, key=lambda it: it.name.lower()),
+            "Choose item to add recipe",
+        )
         recipes = self.game_data.get_recipes_producing(item)
-
-        recipes.sort(key=lambda r: r.name.lower())
+        recipes.sort(key=lambda r: (r.name.startswith("Alternate"), r.name.lower()))
 
         print("Available Recipes\n===========================================")
         for recipe in recipes:
@@ -231,7 +234,7 @@ class InteractiveRunner:
     @_cancelable_decorator
     def add_goal_recipe(self) -> None:
         recipes = self.game_data.get_recipes_producing(self.production_chain.goal)
-        recipes.sort(key=lambda r: r.name.lower())
+        recipes.sort(key=lambda r: (r.name.startswith("Alternate"), r.name.lower()))
 
         print("Available Recipes\n===========================")
         for recipe in recipes:
@@ -254,7 +257,10 @@ class InteractiveRunner:
             return
 
         item = choose_named(
-            items=self.production_chain.get_involved_items(),
+            items=sorted(
+                self.production_chain.get_involved_items(),
+                key=lambda it: it.name.lower(),
+            ),
             prompt="Chose item to scale",
         )
         amount = get_positive_float(
@@ -268,7 +274,12 @@ class InteractiveRunner:
 
     @_cancelable_decorator
     def remove_recipe(self) -> None:
-        recipe = choose_named(self.production_chain.recipes.keys())
+        recipe = choose_named(
+            sorted(
+                self.production_chain.recipes.keys(),
+                key=lambda it: it.name.lower(),
+            )
+        )
         del self.production_chain.recipes[recipe]
 
     def print_state(self) -> None:
@@ -281,7 +292,7 @@ class InteractiveRunner:
         try:
             self.production_chain.save(path)
             print(f"Saved to {path.resolve()}\n")
-        except:
+        except Exception:
             traceback.print_exc()
             print(f"\nCould not save to {path}. See above traceback for details")
 
@@ -293,16 +304,15 @@ class InteractiveRunner:
                 filename=path,
                 game_data=self.game_data,
             )
+            self.production_chain = new_chain
         except Exception:
             traceback.print_exc()
             print(f"\nCould not load {path}. See above traceback for details")
 
-        self.production_chain = new_chain
-
     @classmethod
     def from_production_chain_file(
         cls,
-        filename: ic.PathStr,
+        filename: pathlib.Path,
         game_data: ic.GameData,
     ) -> ty.Self:
         return cls(
@@ -358,7 +368,7 @@ class InteractiveRunner:
         except _WeDoneException:
             pass
 
-    _DISPATCH_TABLE: ty.ClassVar[dict[str, ty.Callable[[ty.Self], None]]] = {
+    _DISPATCH_TABLE: ty.ClassVar[dict[str, ty.Callable[[InteractiveRunner], None]]] = {
         "add-recipe-shortage": add_recipe_for_shortage_item,
         "add-recipe-goal": add_goal_recipe,
         "scale-item": scale_item,

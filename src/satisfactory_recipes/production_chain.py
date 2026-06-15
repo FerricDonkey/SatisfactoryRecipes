@@ -82,7 +82,7 @@ class ProductionChain:
             net += recipe.products_per_min * count
             net -= recipe.consume_per_min * count
 
-        to_del = [item for item, amount in net.items() if math.isclose(amount, 0)]
+        to_del = [item for item, amount in net.items() if amount == 0]
         for item in to_del:
             del net[item]
 
