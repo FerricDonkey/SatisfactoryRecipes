@@ -5,6 +5,7 @@ Contains basic classes for things like recipes, items, buildings
 import abc
 import dataclasses
 import enum
+import fractions as fr
 import json
 import pathlib
 import sys
@@ -50,7 +51,9 @@ class Building(_BaseInfo):
 
     name: str
     category: str
-    power_draw: float  # NOTE: some recipes ADD power
+    power_draw: (
+        fr.Fraction
+    )  # NOTE: If the power is 0 (eg Particle Accelerator), Power comes from the recipe
 
     @classmethod
     def _from_dict_impl(cls, in_dict: dict[str, str]) -> ty.Self:
@@ -58,7 +61,7 @@ class Building(_BaseInfo):
             class_name=in_dict["ClassName"],
             name=in_dict["mDisplayName"],
             category="<<PLACEHOLDER-FIX-THIS>>",
-            power_draw=float(in_dict["mPowerConsumption"]),
+            power_draw=fr.Fraction(in_dict["mPowerConsumption"]),
         )
 
     @property
@@ -88,8 +91,9 @@ class MatterState(enum.StrEnum):
 class Item(_BaseInfo):
     name: str
     matter_state: str
-    stack_size: int | None  # fluids don't have stack
+    stack_size: int
     resource_sink_points: int
+    is_resource: bool
 
     @property
     def is_liquid(self) -> bool:
@@ -107,10 +111,7 @@ class Item(_BaseInfo):
     def _from_dict_impl(cls, in_dict: dict[str, str]) -> ty.Self:
         """Load from a dictionary."""
         matter_state = MatterState.from_doc_form(in_dict["mForm"])
-        try:
-            stack_size = int(in_dict["mCachedStackSize"])
-        except ValueError:
-            stack_size = 0
+        stack_size = int(in_dict["mCachedStackSize"])
 
         return cls(
             class_name=in_dict["ClassName"],
@@ -118,6 +119,7 @@ class Item(_BaseInfo):
             matter_state=matter_state,
             stack_size=stack_size,
             resource_sink_points=int(in_dict.get("mResourceSinkPoints", 0)),
+            is_resource=("mManualMiningAudioName" in in_dict),
         )
 
 
@@ -132,14 +134,14 @@ class RecipeRaw(_BaseInfo):
     """
 
     name: str
-    ingredients: dict[str, int]
-    products: dict[str, int]
+    ingredients: dict[str, fr.Fraction]
+    products: dict[str, fr.Fraction]
     produced_in: list[str]
-    craft_time: float
-    mean_power_draw: float
+    craft_time: fr.Fraction
+    mean_power_draw: fr.Fraction
 
     @staticmethod
-    def parse_item_counts(items_str: str) -> dict[str, int]:
+    def parse_item_counts(items_str: str) -> dict[str, fr.Fraction]:
         """
         Take the mIngredients/mProducts string (or similar), convert to dictionary.
 
@@ -147,7 +149,7 @@ class RecipeRaw(_BaseInfo):
         """
         items_str = items_str[1:-1]
         item_strs = [val.strip("()") for val in items_str.split("),(")]
-        out_d: dict[str, int] = {}
+        out_d: dict[str, fr.Fraction] = {}
         for item_str in item_strs:
             if not item_str:
                 continue
@@ -155,7 +157,7 @@ class RecipeRaw(_BaseInfo):
                 key_part, amount_part = item_str.split(",")
             except Exception:
                 raise RuntimeError(f"Parse Error:\n    {items_str=}\n    {item_str=}\n")
-            amount = int(amount_part.split("=")[1])
+            amount = fr.Fraction(amount_part.split("=")[1])
 
             key_part = key_part.split("=")[1]
             key = key_part.split(".")[-1].rstrip("\"'")
@@ -179,8 +181,8 @@ class RecipeRaw(_BaseInfo):
         # I think mean_power_draw is correct - the names make no sense, but they match
         # what I see for recipes.
         mean_power_draw = (
-            2 * float(in_dict.get("mVariablePowerConsumptionConstant", 0))
-            + float(in_dict.get("mVariablePowerConsumptionFactor", 0))
+            2 * fr.Fraction(in_dict.get("mVariablePowerConsumptionConstant", "0"))
+            + fr.Fraction(in_dict.get("mVariablePowerConsumptionFactor", "0"))
         ) / 2
         return cls(
             class_name=in_dict["ClassName"],
@@ -188,29 +190,29 @@ class RecipeRaw(_BaseInfo):
             ingredients=cls.parse_item_counts(in_dict["mIngredients"]),
             products=cls.parse_item_counts(in_dict["mProduct"]),
             produced_in=cls.parse_produced_in(in_dict["mProducedIn"]),
-            craft_time=float(in_dict["mManufactoringDuration"]),
+            craft_time=fr.Fraction(in_dict["mManufactoringDuration"]),
             mean_power_draw=mean_power_draw,
         )
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True, slots=True, order=True)
 class Recipe(_BaseInfo):
-    _FLUID_REDUCTION_FACTOR: ty.ClassVar[int] = 1000
-
     name: str
     consume: sc.ScalableCounter[Item]
     consume_per_min: sc.ScalableCounter[Item]
     products: sc.ScalableCounter[Item]
-    produce_per_min: sc.ScalableCounter[Item]
+    products_per_min: sc.ScalableCounter[Item]
     produced_in: Building | None
-    craft_time: float
-    _variable_part_mean_power_draw: float  # From raw recipe, for variable things only
+    craft_time: fr.Fraction
+    _variable_part_mean_power_draw: (
+        fr.Fraction
+    )  # From raw recipe, for variable things only
 
     @property
-    def mean_power(self) -> float:
+    def mean_power(self) -> fr.Fraction:
         # Certain fixmas items are weird
         if self.produced_in is None:
-            return 0
+            return fr.Fraction(0, 1)
 
         # TODO: Make more idiomatic. Basically, buildings set their power to 0
         #       if they should use the recipe power.
@@ -219,13 +221,13 @@ class Recipe(_BaseInfo):
 
         return self._variable_part_mean_power_draw
 
-    def make_pretty_str(self, indent: int = 0, scale: float | None = None) -> str:
+    def make_pretty_str(self, indent: int = 0, scale: fr.Fraction | None = None) -> str:
         if scale is not None:
             postfix = f" x {scale:.3f}"
         else:
             postfix = ""
         desc = f"{self.name}{postfix}:\n    Produce:"
-        for item, per_min in self.produce_per_min.items():
+        for item, per_min in self.products_per_min.items():
             if scale is not None:
                 per_min *= scale
             per_craft = self.products[item]
@@ -252,7 +254,7 @@ class Recipe(_BaseInfo):
     def print(
         self,
         indent: int = 0,
-        scale: float | None = None,
+        scale: fr.Fraction | None = None,
         file: ty.TextIO = sys.stdout,
     ) -> None:
         file.write(f"{self.make_pretty_str(indent=indent, scale=scale)}\n")
@@ -278,13 +280,15 @@ class Recipe(_BaseInfo):
 
         """
 
-        def convert_item_d(item_d: dict[str, float]) -> sc.ScalableCounter[Item]:
+        def convert_item_d(
+            item_d: dict[str, fr.Fraction],
+        ) -> sc.ScalableCounter[Item]:
             """Given dictionary of item keys to counts, make dictionary from Item objects to counts."""
             new_d = sc.ScalableCounter[Item]()
             for class_name, amount in item_d.items():
                 item = class_name_to_item_d[class_name]
                 if item.is_fluid:
-                    amount /= cls._FLUID_REDUCTION_FACTOR
+                    amount = fr.Fraction(amount, 1000)
                 new_d[item] = amount
             new_d.freeze()
             return new_d
@@ -304,20 +308,20 @@ class Recipe(_BaseInfo):
                 f"stations, but got {buildings=}"
             )
 
-        produce = convert_item_d(base_recipe.products)
+        products = convert_item_d(base_recipe.products)
         consume = convert_item_d(base_recipe.ingredients)
         consume_per_min = consume * (60 / base_recipe.craft_time)
-        produce_per_min = produce * (60 / base_recipe.craft_time)
+        products_per_min = products * (60 / base_recipe.craft_time)
         consume_per_min.freeze()
-        produce_per_min.freeze()
+        products_per_min.freeze()
 
         return cls(
             class_name=base_recipe.class_name,
             name=base_recipe.name,
             consume=consume,
             consume_per_min=consume_per_min,
-            products=produce,
-            produce_per_min=produce_per_min,
+            products=products,
+            products_per_min=products_per_min,
             produced_in=buildings[0] if buildings else None,
             craft_time=base_recipe.craft_time,
             _variable_part_mean_power_draw=base_recipe.mean_power_draw,

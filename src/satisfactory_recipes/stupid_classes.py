@@ -2,6 +2,7 @@
 
 import collections
 import collections.abc as cabc
+import fractions
 import typing as ty
 
 
@@ -39,9 +40,9 @@ class StupidFrozenDict[K, V](dict[K, V]):
         return hash(tuple(sorted(self.items())))
 
 
-class ScalableCounter[T](collections.defaultdict[T, float]):
+class ScalableCounter[T](collections.defaultdict[T, fractions.Fraction]):
     """
-    defaultdict(float) whose values can be added/subtracted/scaled.
+    defaultdict(fractions.Fraction) whose values can be added/subtracted/scaled.
 
     Missing keys behave like 0.0, because this is intentionally still a
     defaultdict. Can be frozen for hashability.
@@ -49,19 +50,17 @@ class ScalableCounter[T](collections.defaultdict[T, float]):
 
     def __init__(
         self,
-        mapping: cabc.Mapping[T, float] | cabc.Iterable[tuple[T, float]] = (),
+        mapping: cabc.Mapping[T, fractions.Fraction]
+        | cabc.Iterable[tuple[T, fractions.Fraction]] = (),
         /,
         *,
         frozen: bool = False,
-        **kwargs: float,
+        **kwargs: fractions.Fraction,
     ) -> None:
         self._frozen: bool = False
         self._hash: int | None = None
 
-        super().__init__(float)
-
-        # Use the base update during construction. We intentionally allow
-        # population before applying the requested frozen state.
+        super().__init__(fractions.Fraction)
         super().update(mapping, **kwargs)
 
         self._frozen = frozen
@@ -92,7 +91,7 @@ class ScalableCounter[T](collections.defaultdict[T, float]):
             raise TypeError(f"Called __setattr__ from frozen {type(self).__name__}")
         super().__setattr__(name, value)
 
-    def __setitem__(self, key: T, value: float) -> None:
+    def __setitem__(self, key: T, value: fractions.Fraction) -> None:
         if self._frozen:
             raise TypeError(f"Called __setitem__ from frozen {type(self).__name__}")
         self._hash = None
@@ -110,7 +109,7 @@ class ScalableCounter[T](collections.defaultdict[T, float]):
         self._hash = None
         super().clear()
 
-    def pop(self, key: T, default: object = ty.cast(object, ...)) -> float:
+    def pop(self, key: T, default: object = ty.cast(object, ...)) -> fractions.Fraction:
         if self._frozen:
             raise TypeError(f"Called pop from frozen {type(self).__name__}")
         self._hash = None
@@ -118,15 +117,19 @@ class ScalableCounter[T](collections.defaultdict[T, float]):
         if default is ...:
             return super().pop(key)
 
-        return super().pop(key, ty.cast(float, default))
+        return super().pop(key, ty.cast(fractions.Fraction, default))
 
-    def popitem(self) -> tuple[T, float]:
+    def popitem(self) -> tuple[T, fractions.Fraction]:
         if self._frozen:
             raise TypeError(f"Called popitem from frozen {type(self).__name__}")
         self._hash = None
         return super().popitem()
 
-    def setdefault(self, key: T, default: float = 0.0) -> float:  # type: ignore
+    def setdefault(  # pyright: ignore[reportIncompatibleMethodOverride]
+        self,
+        key: T,
+        default: fractions.Fraction = fractions.Fraction(0, 1),
+    ) -> fractions.Fraction:  # type: ignore
         if self._frozen:
             raise TypeError(f"Called setdefault from frozen {type(self).__name__}")
         self._hash = None
@@ -134,16 +137,17 @@ class ScalableCounter[T](collections.defaultdict[T, float]):
 
     def update(  # type: ignore[override]
         self,
-        mapping: cabc.Mapping[T, float] | cabc.Iterable[tuple[T, float]] = (),
+        mapping: cabc.Mapping[T, fractions.Fraction]
+        | cabc.Iterable[tuple[T, fractions.Fraction]] = (),
         /,
-        **kwargs: float,
+        **kwargs: fractions.Fraction,
     ) -> None:
         if self._frozen:
             raise TypeError(f"Called update from frozen {type(self).__name__}")
         self._hash = None
         super().update(mapping, **kwargs)
 
-    def __ior__(self, other: cabc.Mapping[T, float]) -> ty.Self:  # type: ignore
+    def __ior__(self, other: cabc.Mapping[T, fractions.Fraction]) -> ty.Self:  # type: ignore
         self.update(other)
         return self
 
@@ -159,60 +163,54 @@ class ScalableCounter[T](collections.defaultdict[T, float]):
 
         return self._hash
 
-    def __add__(self, other: cabc.Mapping[T, float]) -> ty.Self:
+    def __add__(self, other: cabc.Mapping[T, fractions.Fraction]) -> ty.Self:
         summed = self.unfrozen_copy()
         summed += other
         return summed
 
-    def __iadd__(self, other: cabc.Mapping[T, float]) -> ty.Self:
+    def __iadd__(self, other: cabc.Mapping[T, fractions.Fraction]) -> ty.Self:
         self._check_mutable_for_inplace()
-
         for key, val in other.items():
             self[key] += val
 
         return self
 
-    def __sub__(self, other: cabc.Mapping[T, float]) -> ty.Self:
+    def __sub__(self, other: cabc.Mapping[T, fractions.Fraction]) -> ty.Self:
         subbed = self.unfrozen_copy()
         subbed -= other
         return subbed
 
-    def __isub__(self, other: cabc.Mapping[T, float]) -> ty.Self:
+    def __isub__(self, other: cabc.Mapping[T, fractions.Fraction]) -> ty.Self:
         self._check_mutable_for_inplace()
-
         for key, val in other.items():
             self[key] -= val
 
         return self
 
-    def __mul__(self, scale: float | int) -> ty.Self:
+    def __mul__(self, scale: fractions.Fraction) -> ty.Self:
         scaled = self.unfrozen_copy()
         scaled *= scale
         return scaled
 
-    def __rmul__(self, scale: float | int) -> ty.Self:
+    def __rmul__(self, scale: fractions.Fraction) -> ty.Self:
         return self * scale
 
-    def __imul__(self, scale: float | int) -> ty.Self:
+    def __imul__(self, scale: fractions.Fraction) -> ty.Self:
         self._check_mutable_for_inplace()
-        self._check_scale(scale, "*")
-
         for key in tuple(self):
-            self[key] *= float(scale)
+            self[key] *= scale
 
         return self
 
-    def __truediv__(self, scale: float | int) -> ty.Self:
+    def __truediv__(self, scale: fractions.Fraction) -> ty.Self:
         scaled = self.unfrozen_copy()
         scaled /= scale
         return scaled
 
-    def __itruediv__(self, scale: float | int) -> ty.Self:
+    def __itruediv__(self, scale: fractions.Fraction) -> ty.Self:
         self._check_mutable_for_inplace()
-        self._check_scale(scale, "/")
-
         for key in tuple(self):
-            self[key] /= float(scale)
+            self[key] /= scale
 
         return self
 
@@ -220,11 +218,4 @@ class ScalableCounter[T](collections.defaultdict[T, float]):
         if self._frozen:
             raise TypeError(
                 f"inplace operations not supported for frozen {type(self).__name__}"
-            )
-
-    @staticmethod
-    def _check_scale(scale: object, op: str) -> None:
-        if not isinstance(scale, int | float):
-            raise TypeError(
-                f"Unsupported operation {op} for scale of type {type(scale).__name__}"
             )

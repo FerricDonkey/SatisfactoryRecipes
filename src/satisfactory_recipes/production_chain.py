@@ -3,6 +3,7 @@ Actual production chain logic
 """
 
 import dataclasses
+import fractions
 import json
 import math
 import pathlib
@@ -78,7 +79,7 @@ class ProductionChain:
     def get_net_per_min(self) -> sc.ScalableCounter[ic.Item]:
         net = sc.ScalableCounter[ic.Item]()
         for recipe, count in self.recipes.items():
-            net += recipe.produce_per_min * count
+            net += recipe.products_per_min * count
             net -= recipe.consume_per_min * count
 
         to_del = [item for item, amount in net.items() if math.isclose(amount, 0)]
@@ -92,7 +93,7 @@ class ProductionChain:
     ) -> sc.ScalableCounter[ic.Item]:
         produced = sum(
             (
-                recipe.produce_per_min * recipe_count
+                recipe.products_per_min * recipe_count
                 for recipe, recipe_count in self.recipes.items()
             ),
             start=sc.ScalableCounter[ic.Item](),
@@ -141,14 +142,17 @@ class ProductionChain:
             )
 
         try:
-            self.recipes[recipe] += amount_needed / recipe.produce_per_min[item]
+            self.recipes[recipe] += fractions.Fraction(
+                amount_needed,
+                recipe.products_per_min[item],
+            )
         except Exception as exc:
             raise RuntimeError(
                 f"problem with Recipe:\n{recipe.make_pretty_str(indent=4)}\n"
                 f"Wanted to use it to make {item}"
             ) from exc
 
-    def scale_item(self, item: ic.Item, amount: float) -> None:
+    def scale_item(self, item: ic.Item, amount: fractions.Fraction) -> None:
         """
         Scale to match input/output of items.
         """
@@ -158,7 +162,7 @@ class ProductionChain:
         net = self.get_net_per_min()
         current_amount = abs(net[item])
         amount = abs(amount)
-        self.recipes *= amount / current_amount
+        self.recipes *= fractions.Fraction(amount, current_amount)
 
     def to_dict(self) -> dict[str, ty.Any]:
         return {

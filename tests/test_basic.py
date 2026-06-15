@@ -1,12 +1,27 @@
 """Basic Tests."""
 
-import json
+import collections.abc as cabc
+import fractions
 
 import pytest
 
 from satisfactory_recipes import info_classes as ic
 from satisfactory_recipes import production_chain as pc
 from satisfactory_recipes import stupid_classes as sc
+
+
+def choose_recipe(recipes: cabc.Collection[ic.Recipe], item: ic.Item) -> ic.Recipe:
+    recipes = sorted(
+        recipes,
+        key=lambda recipe: (
+            len(recipe.products),
+            len(recipe.consume),
+            -recipe.products_per_min[item],
+        ),
+    )
+    recipe = recipes[0]
+    assert item in recipe.products
+    return recipe
 
 
 def test_frozen_dict() -> None:
@@ -25,7 +40,7 @@ def test_get_recipes_producing() -> None:
     for item in game_data.producible_items:
         for recipe in game_data.get_recipes_producing(item):
             assert item in recipe.products
-            assert recipe.produce_per_min[item] > 0
+            assert recipe.products_per_min[item] > 0
 
 
 def test_production_chain_no_crash() -> None:
@@ -34,15 +49,18 @@ def test_production_chain_no_crash() -> None:
     # raise ValueError(f"{game_data.producible_item_name_d}")
     goal_item = game_data.producible_item_name_d["Plutonium Fuel Rod"]
     production_chain = pc.ProductionChain(goal=goal_item)
-    recipe = game_data.get_recipes_producing(goal_item)[0]
-    production_chain.recipes[recipe] = 1
-    production_chain.scale_item(goal_item, 100)
-    production_chain.print()
+    recipe = choose_recipe(game_data.get_recipes_producing(goal_item), goal_item)
+    production_chain.recipes[recipe] = fractions.Fraction(1, 1)
+    production_chain.scale_item(goal_item, fractions.Fraction(100, 1))
+    # production_chain.print()
 
+    count = 0
     while True:
+        print("===================================")
+        # production_chain.print()
         net = production_chain.get_net_per_min()
-        jsonable = {item.name: value for item, value in net.items()}
-        print(json.dumps(jsonable, indent=2))
+        for item, value in net.items():
+            print(f"    {item.name}: {value}")
         print()
         assert float("inf") not in net.values()
 
@@ -50,14 +68,23 @@ def test_production_chain_no_crash() -> None:
         shortage_items = {
             item
             for item in shortage_items
-            if item in game_data.producible_items and item.name != "Water"
+            if item in game_data.producible_items
+            and not item.is_resource
+            and net[item] < -0.00001
         }
         if not shortage_items:
             break
 
         this_item = next(iter(shortage_items))
-        recipe = game_data.get_recipes_producing(this_item)[0]
+        assert net[this_item] < 0
+        print(f"--- {this_item.name} {net[this_item]}")
+        recipe = choose_recipe(game_data.get_recipes_producing(this_item), this_item)
         production_chain.add_scaled_recipe(recipe, this_item)
+        print(f"--- {recipe.name} {production_chain.recipes[recipe]}")
+        recipe.print(indent=6)
+        count += 1
+        if count > 1000:
+            raise RuntimeError("Taking too long, something is up")
 
     print()
     production_chain.print()

@@ -1,5 +1,6 @@
 import argparse
 import dataclasses
+import fractions as fr
 import functools
 import pathlib
 import sys
@@ -71,10 +72,10 @@ def get_path_exists(prompt: str) -> pathlib.Path:
         return path
 
 
-def get_positive_float(prompt: str) -> float:
+def get_positive_float(prompt: str) -> fr.Fraction:
     while True:
         try:
-            value = float(exceptional_input(f"{prompt}: "))
+            value = fr.Fraction(exceptional_input(f"{prompt}: "))
         except ValueError:
             continue
         if value > 0:
@@ -241,7 +242,7 @@ class InteractiveRunner:
         per_min = get_positive_float(
             f"How many {self.production_chain.goal.name} per minute with this recipe"
         )
-        count = per_min / recipe.produce_per_min[self.production_chain.goal]
+        count = per_min / recipe.products_per_min[self.production_chain.goal]
         self.production_chain.recipes[recipe] = count
         print("New Recipe:")
         recipe.print(indent=4, scale=self.production_chain.recipes[recipe])
