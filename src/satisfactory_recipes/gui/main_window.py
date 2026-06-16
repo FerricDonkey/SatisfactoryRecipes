@@ -803,8 +803,6 @@ class MainWindow(QtWidgets.QMainWindow):
                 border: 2px solid #9ca3af;
                 margin-top: 14px;
                 padding: 10px;
-                font-size: 115%;
-                font-weight: 700;
             }
             QGroupBox::title {
                 subcontrol-origin: margin;
@@ -812,6 +810,8 @@ class MainWindow(QtWidgets.QMainWindow):
                 left: 12px;
                 padding: 0 6px;
                 background-color: #ffffff;
+                font-size: 125%;
+                font-weight: 700;
             }
             QHeaderView::section {
                 background-color: #e5e7eb;
@@ -902,8 +902,6 @@ class MainWindow(QtWidgets.QMainWindow):
                 border: 2px solid #777777;
                 margin-top: 14px;
                 padding: 10px;
-                font-size: 115%;
-                font-weight: 700;
             }
             QGroupBox::title {
                 subcontrol-origin: margin;
@@ -911,6 +909,8 @@ class MainWindow(QtWidgets.QMainWindow):
                 left: 12px;
                 padding: 0 6px;
                 background-color: #1e1e1e;
+                font-size: 125%;
+                font-weight: 700;
             }
             QHeaderView::section {
                 background-color: #3e3e42;
