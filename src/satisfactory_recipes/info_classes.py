@@ -26,7 +26,7 @@ class _BaseInfo(abc.ABC):
             return cls._from_dict_impl(in_dict)
         except Exception as exc:
             raise RuntimeError(
-                f"Error processings:\n{json.dumps(in_dict, indent=2)}"
+                f"Error processing:\n{json.dumps(in_dict, indent=2)}"
             ) from exc
 
     @classmethod
@@ -151,8 +151,10 @@ class RecipeRaw(_BaseInfo):
                 continue
             try:
                 key_part, amount_part = item_str.split(",")
-            except Exception:
-                raise RuntimeError(f"Parse Error:\n    {items_str=}\n    {item_str=}\n")
+            except Exception as exc:
+                raise RuntimeError(
+                    f"Parse Error:\n    {items_str=}\n    {item_str=}\n"
+                ) from exc
             amount = fr.Fraction(amount_part.split("=")[1])
 
             key_part = key_part.split("=")[1]
