@@ -8,6 +8,7 @@ import typing as ty
 
 from satisfactory_recipes import info_classes as ic
 from satisfactory_recipes import production_chain as pc
+from satisfactory_recipes import search
 
 MAX_DISPLAY_OPTIONS = 10
 QUIT_COMMANDS = ("exit", "quit")
@@ -132,39 +133,6 @@ def choose_named[T: _SupportsName](
     return items[chosen_index]
 
 
-def _match_score(target: str, key: str) -> int:
-    """
-    How much key matches target. Higher is better
-    """
-
-    def mini_score(targ: str, k: str) -> int:
-        score = 0
-        for c1, c2 in zip(targ, k):
-            if c1.lower() != c2.lower():
-                break
-            score += 1
-        return score
-
-    scores: list[int] = []
-    while target:
-        scores.append(mini_score(target, key))
-        target = " ".join(target.split()[1:])
-    return max(scores)
-
-
-def _sort_options(options: ty.Iterable[str], entry: str) -> list[str]:
-    # NOTE: better matches first
-    def key_func(option: str):
-        return (
-            -(option.lower() == entry.lower()),
-            -(option.lower().startswith(entry.lower())),
-            -_match_score(option, entry),
-            option,
-        )
-
-    return [opt for opt in sorted(options, key=key_func) if _match_score(opt, entry)]
-
-
 def get_arbitrary_item(
     game_data: ic.GameData,
     must_be_producible: bool,
@@ -190,7 +158,7 @@ def get_arbitrary_item(
         if item is not None:
             return item
 
-        options = _sort_options(item_name_d.keys(), item_name)
+        options = search.sort_options(item_name_d.keys(), item_name)
         if options:
             print("Did you mean:")
             for index, option in enumerate(options[:MAX_DISPLAY_OPTIONS]):

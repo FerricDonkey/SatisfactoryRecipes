@@ -54,6 +54,25 @@ def test_parser_supports_cli_subcommand() -> None:
     assert args.game_path == pathlib.Path("Satisfactory")
 
 
+def test_parser_supports_gui_subcommand() -> None:
+    args = main.make_parser().parse_args(
+        [
+            "gui",
+            "--infile",
+            "chain.json",
+            "--scale",
+            "1/4",
+            "--docs-path",
+            "en-us.json",
+        ]
+    )
+
+    assert args.command == "gui"
+    assert args.filename == pathlib.Path("chain.json")
+    assert args.scale == fr.Fraction(1, 4)
+    assert args.docs_path == pathlib.Path("en-us.json")
+
+
 def test_dispatch_runs_cli(monkeypatch: pytest.MonkeyPatch) -> None:
     args = main.make_parser().parse_args(["cli"])
     calls: list[argparse.Namespace] = []
@@ -62,6 +81,20 @@ def test_dispatch_runs_cli(monkeypatch: pytest.MonkeyPatch) -> None:
         calls.append(parsed_args)
 
     monkeypatch.setattr(main, "run_cli", fake_run_cli)
+
+    main.dispatch(args)
+
+    assert calls == [args]
+
+
+def test_dispatch_runs_gui(monkeypatch: pytest.MonkeyPatch) -> None:
+    args = main.make_parser().parse_args(["gui"])
+    calls: list[argparse.Namespace] = []
+
+    def fake_run_gui(parsed_args: argparse.Namespace) -> None:
+        calls.append(parsed_args)
+
+    monkeypatch.setattr(main, "run_gui", fake_run_gui)
 
     main.dispatch(args)
 
