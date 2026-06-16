@@ -143,17 +143,14 @@ def run_cli(args: argparse.Namespace) -> None:
 
 def run_gui(args: argparse.Namespace) -> None:
     docs_path = resolve_docs_path(args)
-
-    game_data = ic.GameData.from_json(docs_path)
     scale = getattr(args, "scale", fr.Fraction(1, 1))
-    if scale != 1:
-        game_data.scale_recipes(scale)
 
     from satisfactory_recipes.gui import app as gui_app
 
     gui_app.main(
-        game_data=game_data,
+        docs_path=docs_path,
         filename=getattr(args, "filename", None),
+        initial_scale=scale,
     )
 
 

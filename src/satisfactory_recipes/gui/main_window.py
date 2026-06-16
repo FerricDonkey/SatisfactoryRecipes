@@ -3,7 +3,7 @@
 import fractions as fr
 import pathlib
 
-from PySide6 import QtGui, QtWidgets
+from PySide6 import QtCore, QtGui, QtWidgets
 
 from satisfactory_recipes import info_classes as ic
 from satisfactory_recipes import production_chain as pc
@@ -13,17 +13,31 @@ from satisfactory_recipes.gui import dialogs
 class MainWindow(QtWidgets.QMainWindow):
     """Top-level GUI window for a production chain."""
 
+    SCALE_OPTIONS: tuple[fr.Fraction, ...] = (
+        fr.Fraction(1, 4),
+        fr.Fraction(1, 2),
+        fr.Fraction(3, 4),
+        fr.Fraction(1, 1),
+        fr.Fraction(5, 4),
+        fr.Fraction(3, 2),
+        fr.Fraction(7, 4),
+        fr.Fraction(2, 1),
+    )
+
     def __init__(
         self,
         *,
+        docs_path: pathlib.Path,
         game_data: ic.GameData,
         production_chain: pc.ProductionChain | None = None,
         filename: pathlib.Path | None = None,
     ) -> None:
         super().__init__()
+        self.docs_path = docs_path
         self.game_data = game_data
         self.production_chain = production_chain
         self.filename = filename
+        self.has_unsaved_changes = False
 
         self.setWindowTitle("Satisfactory Recipes")
         self.resize(1100, 760)
@@ -33,9 +47,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self.inputs_table = QtWidgets.QTableWidget()
         self.outputs_table = QtWidgets.QTableWidget()
         self.status_label = QtWidgets.QLabel()
+        self.scale_combo = QtWidgets.QComboBox()
+        self._refreshing_tables = False
+        self._updating_scale_combo = False
 
         self._setup_actions()
         self._setup_layout()
+        self._sync_scale_combo()
         self.refresh()
 
     def _setup_actions(self) -> None:
@@ -47,13 +65,18 @@ class MainWindow(QtWidgets.QMainWindow):
         self.add_goal_recipe_action = QtGui.QAction("Add Goal Recipe...", self)
         self.add_shortage_recipe_action = QtGui.QAction("Add Shortage Recipe...", self)
 
+        self.open_action.setShortcut(QtGui.QKeySequence.StandardKey.Open)
+        self.save_action.setShortcut(QtGui.QKeySequence.StandardKey.Save)
+        self.save_as_action.setShortcut(QtGui.QKeySequence.StandardKey.SaveAs)
+        self.new_action.setShortcut(QtGui.QKeySequence.StandardKey.New)
+
         self.new_action.triggered.connect(self.new_chain)
         self.open_action.triggered.connect(self.open_chain)
         self.save_action.triggered.connect(self.save_chain)
         self.save_as_action.triggered.connect(self.save_chain_as)
         self.exit_action.triggered.connect(self.close)
         self.add_goal_recipe_action.triggered.connect(self.add_goal_recipe_from_ui)
-        self.add_shortage_recipe_action.triggered.connect(self.add_shortage_recipe)
+        self.add_shortage_recipe_action.triggered.connect(self.add_shortage_recipe_from_ui)
 
         file_menu = self.menuBar().addMenu("File")
         file_menu.addAction(self.new_action)
@@ -74,7 +97,15 @@ class MainWindow(QtWidgets.QMainWindow):
         central.setLayout(layout)
 
         self.goal_label.setObjectName("goalLabel")
-        layout.addWidget(self.goal_label)
+        header_layout = QtWidgets.QHBoxLayout()
+        header_layout.addWidget(self.goal_label)
+        header_layout.addStretch()
+        header_layout.addWidget(QtWidgets.QLabel("Recipe scale"))
+        for scale in self.SCALE_OPTIONS:
+            self.scale_combo.addItem(self._scale_display_text(scale), scale)
+        self.scale_combo.currentIndexChanged.connect(self._handle_scale_changed)
+        header_layout.addWidget(self.scale_combo)
+        layout.addLayout(header_layout)
 
         splitter = QtWidgets.QSplitter()
         splitter.addWidget(self._make_recipes_panel())
@@ -97,7 +128,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.add_goal_recipe_button = QtWidgets.QPushButton("Add Goal Recipe...")
         self.add_shortage_recipe_button = QtWidgets.QPushButton("Add Shortage Recipe...")
         self.add_goal_recipe_button.clicked.connect(self.add_goal_recipe_from_ui)
-        self.add_shortage_recipe_button.clicked.connect(self.add_shortage_recipe)
+        self.add_shortage_recipe_button.clicked.connect(self.add_shortage_recipe_from_ui)
         action_layout.addWidget(self.add_goal_recipe_button)
         action_layout.addWidget(self.add_shortage_recipe_button)
         action_layout.addStretch()
@@ -123,8 +154,11 @@ class MainWindow(QtWidgets.QMainWindow):
         for table in (self.inputs_table, self.outputs_table):
             table.setColumnCount(2)
             table.setHorizontalHeaderLabels(["Item", "Per Minute"])
-            table.setEditTriggers(QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers)
+            table.setEditTriggers(QtWidgets.QAbstractItemView.EditTrigger.DoubleClicked)
             table.horizontalHeader().setStretchLastSection(True)
+            table.itemChanged.connect(self._handle_net_amount_changed)
+
+        self.inputs_table.itemDoubleClicked.connect(self._handle_input_double_clicked)
 
         return tabs
 
@@ -147,6 +181,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
             self.production_chain = pc.ProductionChain(goal=choice.item)
             self.filename = None
+            self._mark_unsaved()
             self.refresh()
             self.add_goal_recipe(amount_per_min=choice.amount_per_min)
 
@@ -157,6 +192,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.production_chain = pc.ProductionChain(goal=goal)
         self.filename = None
+        self._mark_unsaved()
         self.refresh()
         self.add_goal_recipe()
 
@@ -168,31 +204,35 @@ class MainWindow(QtWidgets.QMainWindow):
 
         chain = self.production_chain
         recipes = self.game_data.get_recipes_producing(chain.goal)
-        recipe = dialogs.choose_recipe(
-            recipes=recipes,
-            title=f"Choose Recipe for {chain.goal.name}",
-            parent=self,
-        )
-        if recipe is None:
-            return
-
-        amount = amount_per_min
-        if amount is None:
-            amount = dialogs.get_positive_fraction(
-                title="Goal Output Rate",
-                label=f"How many {chain.goal.name} per minute with this recipe?",
+        if amount_per_min is None:
+            selection = dialogs.choose_recipe_with_amount(
+                recipes=recipes,
+                title=f"Choose Recipe for {chain.goal.name}",
                 parent=self,
             )
-            if amount is None:
+            if selection is None:
                 return
+            recipe = selection.recipe
+            amount = selection.amount_per_min
+        else:
+            chosen_recipe = dialogs.choose_recipe(
+                recipes=recipes,
+                title=f"Choose Recipe for {chain.goal.name}",
+                parent=self,
+            )
+            if chosen_recipe is None:
+                return
+            recipe = chosen_recipe
+            amount = amount_per_min
 
         chain.recipes[recipe] = amount / recipe.products_per_min[chain.goal]
+        self._mark_unsaved()
         self.refresh()
 
     def add_goal_recipe_from_ui(self) -> None:
         self.add_goal_recipe()
 
-    def add_shortage_recipe(self) -> None:
+    def add_shortage_recipe(self, shortage_item: ic.Item | None = None) -> None:
         if self.production_chain is None:
             self.prompt_for_goal_if_needed()
             if self.production_chain is None:
@@ -215,11 +255,20 @@ class MainWindow(QtWidgets.QMainWindow):
             )
             return
 
-        item = dialogs.choose_item_from_items(
-            items=shortage_items,
-            title="Choose Shortage Item",
-            parent=self,
-        )
+        item = shortage_item
+        if item is not None and item not in shortage_items:
+            QtWidgets.QMessageBox.information(
+                self,
+                "No Shortage",
+                f"{item.name} is not currently a producible shortage item.",
+            )
+            return
+        if item is None:
+            item = dialogs.choose_item_from_items(
+                items=shortage_items,
+                title="Choose Shortage Item",
+                parent=self,
+            )
         if item is None:
             return
 
@@ -237,7 +286,11 @@ class MainWindow(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.critical(self, "Could Not Add Recipe", str(exc))
             return
 
+        self._mark_unsaved()
         self.refresh()
+
+    def add_shortage_recipe_from_ui(self) -> None:
+        self.add_shortage_recipe()
 
     def open_chain(self) -> bool:
         filename_str, _selected_filter = QtWidgets.QFileDialog.getOpenFileName(
@@ -251,12 +304,16 @@ class MainWindow(QtWidgets.QMainWindow):
 
         filename = pathlib.Path(filename_str)
         try:
-            self.production_chain = pc.ProductionChain.load(filename, self.game_data)
+            game_data = ic.GameData.from_json(self.docs_path)
+            self.production_chain = pc.ProductionChain.load(filename, game_data)
+            self.game_data = game_data
         except Exception as exc:
             QtWidgets.QMessageBox.critical(self, "Open Failed", str(exc))
             return False
 
         self.filename = filename
+        self.has_unsaved_changes = False
+        self._sync_scale_combo()
         self.refresh()
         return True
 
@@ -271,6 +328,7 @@ class MainWindow(QtWidgets.QMainWindow):
             return
 
         self.production_chain.save(self.filename, scale=self.game_data.scale)
+        self.has_unsaved_changes = False
         self.refresh()
 
     def save_chain_as(self) -> None:
@@ -292,6 +350,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self.save_chain()
 
     def refresh(self) -> None:
+        self._refreshing_tables = True
+        try:
+            self._refresh_impl()
+        finally:
+            self._refreshing_tables = False
+
+    def _refresh_impl(self) -> None:
         chain = self.production_chain
         if chain is None:
             self.goal_label.setText("No production chain loaded")
@@ -304,7 +369,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.goal_label.setText(f"Goal: {chain.goal.name}")
         filename = self.filename if self.filename is not None else "Unsaved"
-        self.status_label.setText(f"File: {filename}")
+        self.status_label.setText(f"File: {filename}{self._unsaved_marker()}")
         self._fill_recipes_table(chain)
 
         net = chain.get_net_per_min()
@@ -313,6 +378,131 @@ class MainWindow(QtWidgets.QMainWindow):
         self._fill_net_table(self.inputs_table, inputs)
         self._fill_net_table(self.outputs_table, outputs)
         self._update_recipe_actions()
+
+    def _handle_input_double_clicked(self, table_item: QtWidgets.QTableWidgetItem) -> None:
+        if table_item.column() != 0:
+            return
+
+        item = table_item.data(QtCore.Qt.ItemDataRole.UserRole)
+        if isinstance(item, ic.Item):
+            self.add_shortage_recipe(shortage_item=item)
+
+    def _handle_net_amount_changed(self, table_item: QtWidgets.QTableWidgetItem) -> None:
+        if self._refreshing_tables or table_item.column() != 1:
+            return
+        if self.production_chain is None:
+            return
+
+        item = table_item.data(QtCore.Qt.ItemDataRole.UserRole)
+        if not isinstance(item, ic.Item):
+            return
+
+        try:
+            amount = fr.Fraction(table_item.text())
+        except ValueError:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Invalid Amount",
+                "Enter a positive number or fraction.",
+            )
+            self.refresh()
+            return
+
+        if amount <= 0:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Invalid Amount",
+                "Enter a positive number or fraction.",
+            )
+            self.refresh()
+            return
+
+        try:
+            self.production_chain.scale_item(item, amount)
+        except Exception as exc:
+            QtWidgets.QMessageBox.critical(self, "Could Not Scale", str(exc))
+            self.refresh()
+            return
+
+        self._mark_unsaved()
+        self.refresh()
+
+    def _handle_scale_changed(self, _index: int) -> None:
+        if self._updating_scale_combo:
+            return
+
+        scale = self._selected_scale()
+        if scale is None or scale == self.game_data.scale:
+            return
+
+        if self.production_chain is not None and self.production_chain.recipes:
+            result = QtWidgets.QMessageBox.question(
+                self,
+                "Change Recipe Scale",
+                "Changing recipe scale reloads game data and clears all recipes "
+                "in the current production chain. Continue?",
+                QtWidgets.QMessageBox.StandardButton.Yes
+                | QtWidgets.QMessageBox.StandardButton.No,
+            )
+            if result != QtWidgets.QMessageBox.StandardButton.Yes:
+                self._sync_scale_combo()
+                return
+
+        self._set_recipe_scale(scale)
+
+    def _set_recipe_scale(self, scale: fr.Fraction) -> None:
+        goal_class_name = (
+            self.production_chain.goal.class_name
+            if self.production_chain is not None
+            else None
+        )
+
+        game_data = ic.GameData.from_json(self.docs_path)
+        if scale != 1:
+            game_data.scale_recipes(scale)
+
+        self.game_data = game_data
+        if goal_class_name is not None:
+            self.production_chain = pc.ProductionChain(
+                goal=self.game_data.items_d[goal_class_name],
+            )
+            self.filename = None
+            self._mark_unsaved()
+
+        self._sync_scale_combo()
+        self.refresh()
+
+    def _mark_unsaved(self) -> None:
+        self.has_unsaved_changes = True
+
+    def _unsaved_marker(self) -> str:
+        if self.has_unsaved_changes:
+            return " *"
+        return ""
+
+    def _selected_scale(self) -> fr.Fraction | None:
+        data = self.scale_combo.currentData()
+        if isinstance(data, fr.Fraction):
+            return data
+        return None
+
+    def _sync_scale_combo(self) -> None:
+        self._updating_scale_combo = True
+        try:
+            for index, scale in enumerate(self.SCALE_OPTIONS):
+                if scale == self.game_data.scale:
+                    self.scale_combo.setCurrentIndex(index)
+                    return
+            self.scale_combo.setCurrentIndex(-1)
+        finally:
+            self._updating_scale_combo = False
+
+    @staticmethod
+    def _scale_display_text(scale: fr.Fraction) -> str:
+        display = f"{float(scale):.2f}".rstrip("0")
+        if display.endswith("."):
+            display += "0"
+        return display
 
     def _update_recipe_actions(self) -> None:
         has_chain = self.production_chain is not None
@@ -356,7 +546,14 @@ class MainWindow(QtWidgets.QMainWindow):
         items = sorted(values.items(), key=lambda pair: pair[0].name.lower())
         table.setRowCount(len(items))
         for row, (item, amount) in enumerate(items):
-            table.setItem(row, 0, QtWidgets.QTableWidgetItem(item.name))
-            table.setItem(row, 1, QtWidgets.QTableWidgetItem(f"{amount:.3f}"))
+            name_item = QtWidgets.QTableWidgetItem(item.name)
+            name_item.setFlags(name_item.flags() & ~QtCore.Qt.ItemFlag.ItemIsEditable)
+            name_item.setData(QtCore.Qt.ItemDataRole.UserRole, item)
+
+            amount_item = QtWidgets.QTableWidgetItem(f"{amount:.3f}")
+            amount_item.setData(QtCore.Qt.ItemDataRole.UserRole, item)
+
+            table.setItem(row, 0, name_item)
+            table.setItem(row, 1, amount_item)
 
         table.resizeColumnsToContents()

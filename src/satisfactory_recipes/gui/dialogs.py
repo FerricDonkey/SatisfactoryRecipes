@@ -21,6 +21,12 @@ class InitialGoalSelection:
     amount_per_min: fr.Fraction
 
 
+@dataclasses.dataclass(frozen=True, kw_only=True, slots=True)
+class RecipeSelection:
+    recipe: ic.Recipe
+    amount_per_min: fr.Fraction
+
+
 class ItemSearchDialog(QtWidgets.QDialog):
     """Dialog for selecting an item from a searchable list."""
 
@@ -215,6 +221,7 @@ class RecipeSearchDialog(QtWidgets.QDialog):
         *,
         recipes: ty.Iterable[ic.Recipe],
         title: str,
+        show_amount: bool = False,
         parent: QtWidgets.QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -224,9 +231,13 @@ class RecipeSearchDialog(QtWidgets.QDialog):
         self._recipes_by_name = {recipe.name: recipe for recipe in recipes}
         self._all_names = sorted(self._recipes_by_name)
         self.selected_recipe: ic.Recipe | None = None
+        self.selected_amount_per_min: fr.Fraction | None = None
 
         self.search_edit = QtWidgets.QLineEdit()
         self.search_edit.setPlaceholderText("Search recipes")
+        self.amount_edit: QtWidgets.QLineEdit | None = None
+        if show_amount:
+            self.amount_edit = QtWidgets.QLineEdit("100")
         self.recipe_list = QtWidgets.QListWidget()
         self.recipe_list.setSelectionMode(
             QtWidgets.QAbstractItemView.SelectionMode.SingleSelection
@@ -250,6 +261,11 @@ class RecipeSearchDialog(QtWidgets.QDialog):
         layout = QtWidgets.QVBoxLayout()
         layout.addWidget(self.search_edit)
         layout.addWidget(splitter)
+        if self.amount_edit is not None:
+            amount_layout = QtWidgets.QHBoxLayout()
+            amount_layout.addWidget(QtWidgets.QLabel("Per minute"))
+            amount_layout.addWidget(self.amount_edit)
+            layout.addLayout(amount_layout)
         layout.addWidget(buttons)
         self.setLayout(layout)
 
@@ -290,16 +306,45 @@ class RecipeSearchDialog(QtWidgets.QDialog):
         self.details.setPlainText(recipe.make_pretty_str())
 
     def _accept_recipe(self, item: QtWidgets.QListWidgetItem) -> None:
+        amount = self._get_amount_if_needed()
+        if amount is None and self.amount_edit is not None:
+            return
+
         self.selected_recipe = ty.cast(
             ic.Recipe,
             item.data(QtCore.Qt.ItemDataRole.UserRole),
         )
+        self.selected_amount_per_min = amount
         self.accept()
 
     def _accept_selected_recipe(self) -> None:
         selected_items = self.recipe_list.selectedItems()
         if selected_items:
             self._accept_recipe(selected_items[0])
+
+    def _get_amount_if_needed(self) -> fr.Fraction | None:
+        if self.amount_edit is None:
+            return None
+
+        try:
+            amount = fr.Fraction(self.amount_edit.text())
+        except ValueError:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Invalid Amount",
+                "Enter a positive number or fraction.",
+            )
+            return None
+
+        if amount <= 0:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Invalid Amount",
+                "Enter a positive number or fraction.",
+            )
+            return None
+
+        return amount
 
 
 def choose_recipe(
@@ -317,6 +362,29 @@ def choose_recipe(
     if result == QtWidgets.QDialog.DialogCode.Accepted:
         return dialog.selected_recipe
     return None
+
+
+def choose_recipe_with_amount(
+    *,
+    recipes: ty.Iterable[ic.Recipe],
+    title: str,
+    parent: QtWidgets.QWidget | None = None,
+) -> RecipeSelection | None:
+    dialog = RecipeSearchDialog(
+        recipes=recipes,
+        title=title,
+        show_amount=True,
+        parent=parent,
+    )
+    result = dialog.exec()
+    if result != QtWidgets.QDialog.DialogCode.Accepted:
+        return None
+    if dialog.selected_recipe is None or dialog.selected_amount_per_min is None:
+        return None
+    return RecipeSelection(
+        recipe=dialog.selected_recipe,
+        amount_per_min=dialog.selected_amount_per_min,
+    )
 
 
 def get_positive_fraction(

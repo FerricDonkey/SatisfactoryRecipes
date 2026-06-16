@@ -1,5 +1,6 @@
 """GUI application bootstrap."""
 
+import fractions as fr
 import pathlib
 import sys
 
@@ -12,19 +13,24 @@ from satisfactory_recipes.gui import main_window
 
 def main(
     *,
-    game_data: ic.GameData,
+    docs_path: pathlib.Path,
     filename: pathlib.Path | None = None,
+    initial_scale: fr.Fraction = fr.Fraction(1, 1),
 ) -> int:
     app = QtWidgets.QApplication.instance()
     owns_app = app is None
     if app is None:
         app = QtWidgets.QApplication(sys.argv[:1])
 
+    game_data = ic.GameData.from_json(docs_path)
     production_chain = None
     if filename is not None:
         production_chain = pc.ProductionChain.load(filename, game_data)
+    elif initial_scale != 1:
+        game_data.scale_recipes(initial_scale)
 
     window = main_window.MainWindow(
+        docs_path=docs_path,
         game_data=game_data,
         production_chain=production_chain,
         filename=filename,
