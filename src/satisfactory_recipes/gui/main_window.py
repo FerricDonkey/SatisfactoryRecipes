@@ -52,6 +52,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.recipes_table = QtWidgets.QTableWidget()
         self.inputs_table = QtWidgets.QTableWidget()
         self.outputs_table = QtWidgets.QTableWidget()
+        self.recipe_details_edit = QtWidgets.QPlainTextEdit()
         self.status_label = QtWidgets.QLabel()
         self.scale_combo = QtWidgets.QComboBox()
         self._refreshing_tables = False
@@ -187,6 +188,7 @@ class MainWindow(QtWidgets.QMainWindow):
         tabs = QtWidgets.QTabWidget()
         tabs.addTab(self.inputs_table, "Inputs")
         tabs.addTab(self.outputs_table, "Outputs")
+        tabs.addTab(self.recipe_details_edit, "Recipe Details")
 
         for table in (self.inputs_table, self.outputs_table):
             table.setColumnCount(2)
@@ -196,6 +198,7 @@ class MainWindow(QtWidgets.QMainWindow):
             table.itemChanged.connect(self._handle_net_amount_changed)
 
         self.inputs_table.itemDoubleClicked.connect(self._handle_input_double_clicked)
+        self.recipe_details_edit.setReadOnly(True)
 
         return tabs
 
@@ -401,6 +404,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self._fill_recipes_table(None)
             self._fill_net_table(self.inputs_table, {})
             self._fill_net_table(self.outputs_table, {})
+            self.recipe_details_edit.clear()
             self._update_recipe_actions()
             return
 
@@ -414,6 +418,7 @@ class MainWindow(QtWidgets.QMainWindow):
         outputs = {item: amount for item, amount in net.items() if amount > 0}
         self._fill_net_table(self.inputs_table, inputs)
         self._fill_net_table(self.outputs_table, outputs)
+        self._fill_recipe_details(chain)
         self._update_recipe_actions()
 
     def _handle_input_double_clicked(self, table_item: QtWidgets.QTableWidgetItem) -> None:
@@ -794,6 +799,14 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.recipes_table.setItem(row, col, QtWidgets.QTableWidgetItem(value))
 
         self.recipes_table.resizeColumnsToContents()
+
+    def _fill_recipe_details(self, chain: pc.ProductionChain) -> None:
+        details: list[str] = []
+        recipes = sorted(chain.recipes.items(), key=lambda pair: pair[0].name.lower())
+        for recipe, count in recipes:
+            details.append(recipe.make_pretty_str(scale=count))
+
+        self.recipe_details_edit.setPlainText("\n\n".join(details))
 
     def _fill_net_table(
         self,
