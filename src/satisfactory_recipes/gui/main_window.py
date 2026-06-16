@@ -58,7 +58,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.recipes_table = QtWidgets.QTableWidget()
         self.inputs_table = QtWidgets.QTableWidget()
         self.outputs_table = QtWidgets.QTableWidget()
-        self.recipe_details_edit = QtWidgets.QTextEdit()
+        self.recipe_details_scroll = QtWidgets.QScrollArea()
+        self.recipe_details_widget = QtWidgets.QWidget()
+        self.recipe_details_layout = QtWidgets.QVBoxLayout()
         self.status_label = QtWidgets.QLabel()
         self.scale_combo = QtWidgets.QComboBox()
         self._refreshing_tables = False
@@ -231,7 +233,10 @@ class MainWindow(QtWidgets.QMainWindow):
         tabs = QtWidgets.QTabWidget()
         tabs.addTab(self.inputs_table, "Inputs")
         tabs.addTab(self.outputs_table, "Outputs")
-        tabs.addTab(self.recipe_details_edit, "Recipe Details")
+        self.recipe_details_widget.setLayout(self.recipe_details_layout)
+        self.recipe_details_scroll.setWidget(self.recipe_details_widget)
+        self.recipe_details_scroll.setWidgetResizable(True)
+        tabs.addTab(self.recipe_details_scroll, "Recipe Details")
 
         for table in (self.inputs_table, self.outputs_table):
             table.setColumnCount(2)
@@ -250,8 +255,7 @@ class MainWindow(QtWidgets.QMainWindow):
             table.itemChanged.connect(self._handle_net_amount_changed)
 
         self.inputs_table.itemDoubleClicked.connect(self._handle_input_double_clicked)
-        self.recipe_details_edit.setReadOnly(True)
-        self.recipe_details_edit.setSizePolicy(
+        self.recipe_details_scroll.setSizePolicy(
             QtWidgets.QSizePolicy.Policy.Expanding,
             QtWidgets.QSizePolicy.Policy.Expanding,
         )
@@ -460,7 +464,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self._fill_recipes_table(None)
             self._fill_net_table(self.inputs_table, {})
             self._fill_net_table(self.outputs_table, {})
-            self.recipe_details_edit.clear()
+            self._clear_recipe_details()
             self._update_recipe_actions()
             return
 
@@ -789,6 +793,26 @@ class MainWindow(QtWidgets.QMainWindow):
                 selection-background-color: #0078d7;
                 selection-color: #ffffff;
             }
+            QScrollArea {
+                background-color: #f5f5f5;
+                border: 1px solid #b8b8b8;
+            }
+            QGroupBox {
+                background-color: #ffffff;
+                color: #000000;
+                border: 2px solid #9ca3af;
+                margin-top: 14px;
+                padding: 10px;
+                font-size: 115%;
+                font-weight: 700;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                subcontrol-position: top left;
+                left: 12px;
+                padding: 0 6px;
+                background-color: #ffffff;
+            }
             QHeaderView::section {
                 background-color: #e5e7eb;
                 color: #000000;
@@ -868,6 +892,26 @@ class MainWindow(QtWidgets.QMainWindow):
                 selection-background-color: #0078d7;
                 selection-color: #ffffff;
             }
+            QScrollArea {
+                background-color: #2d2d30;
+                border: 1px solid #5a5a5a;
+            }
+            QGroupBox {
+                background-color: #1e1e1e;
+                color: #ffffff;
+                border: 2px solid #777777;
+                margin-top: 14px;
+                padding: 10px;
+                font-size: 115%;
+                font-weight: 700;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                subcontrol-position: top left;
+                left: 12px;
+                padding: 0 6px;
+                background-color: #1e1e1e;
+            }
             QHeaderView::section {
                 background-color: #3e3e42;
                 color: #ffffff;
@@ -939,12 +983,42 @@ class MainWindow(QtWidgets.QMainWindow):
         self.recipes_table.resizeRowsToContents()
 
     def _fill_recipe_details(self, chain: pc.ProductionChain) -> None:
-        details: list[str] = []
+        self._clear_recipe_details()
         recipes = sorted(chain.recipes.items(), key=lambda pair: pair[0].name.lower())
         for recipe, count in recipes:
-            details.append(recipe_format.recipe_details_html(recipe, count))
+            self.recipe_details_layout.addWidget(
+                self._make_recipe_details_card(recipe, count)
+            )
 
-        self.recipe_details_edit.setHtml(recipe_format.recipe_details_document_html(details))
+        self.recipe_details_layout.addStretch()
+
+    def _clear_recipe_details(self) -> None:
+        while self.recipe_details_layout.count():
+            item = self.recipe_details_layout.takeAt(0)
+            if item is None:
+                continue
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+
+    def _make_recipe_details_card(
+        self,
+        recipe: ic.Recipe,
+        count: fr.Fraction,
+    ) -> QtWidgets.QGroupBox:
+        card = QtWidgets.QGroupBox(f"{recipe.name} x {count:.3f}")
+        card_layout = QtWidgets.QVBoxLayout()
+        card.setLayout(card_layout)
+
+        body = QtWidgets.QLabel()
+        body.setTextFormat(QtCore.Qt.TextFormat.RichText)
+        body.setText(recipe_format.recipe_body_html(recipe, count))
+        body.setWordWrap(True)
+        body.setTextInteractionFlags(
+            QtCore.Qt.TextInteractionFlag.TextSelectableByMouse
+        )
+        card_layout.addWidget(body)
+        return card
 
     def _fill_net_table(
         self,

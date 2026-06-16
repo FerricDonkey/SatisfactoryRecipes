@@ -7,6 +7,15 @@ from satisfactory_recipes import info_classes as ic
 
 def recipe_details_html(recipe: ic.Recipe, count: fr.Fraction) -> str:
     title = f"{recipe.name} x {count:.3f}"
+    return (
+        '<div class="recipe-card">'
+        f'<div class="recipe-title">{title}</div>'
+        f"{recipe_body_html(recipe, count)}"
+        "</div>"
+    )
+
+
+def recipe_body_html(recipe: ic.Recipe, count: fr.Fraction) -> str:
     produce_items = "".join(
         "<li>"
         f"<b>{item.name}</b> x {recipe.products[item]:.1f} "
@@ -32,14 +41,11 @@ def recipe_details_html(recipe: ic.Recipe, count: fr.Fraction) -> str:
         )
 
     return (
-        '<div class="recipe-card">'
-        f'<div class="recipe-title">{title}</div>'
         '<div class="section-title">Produce</div>'
         f"<ul>{produce_items}</ul>"
         '<div class="section-title">Consume</div>'
         f"<ul>{consume_items}</ul>"
         f"{produced_in}"
-        "</div>"
     )
 
 
