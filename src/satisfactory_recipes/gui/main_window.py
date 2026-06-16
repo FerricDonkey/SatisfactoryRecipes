@@ -2,15 +2,17 @@
 
 import fractions as fr
 import pathlib
+import typing as ty
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
+from satisfactory_recipes import config as sr_config
 from satisfactory_recipes import info_classes as ic
 from satisfactory_recipes import production_chain as pc
-from satisfactory_recipes.gui import dialogs
+from satisfactory_recipes.gui import dialogs, recipe_format
 
 
-type ThemeName = str
+type ThemeName = ty.Literal["system", "light", "dark"]
 type StyleName = str
 
 
@@ -33,11 +35,13 @@ class MainWindow(QtWidgets.QMainWindow):
         *,
         docs_path: pathlib.Path,
         game_data: ic.GameData,
+        user_config: sr_config.Configuration,
         production_chain: pc.ProductionChain | None = None,
         filename: pathlib.Path | None = None,
     ) -> None:
         super().__init__()
         self.docs_path = docs_path
+        self.user_config = user_config
         self.game_data = game_data
         self.production_chain = production_chain
         self.filename = filename
@@ -54,7 +58,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.recipes_table = QtWidgets.QTableWidget()
         self.inputs_table = QtWidgets.QTableWidget()
         self.outputs_table = QtWidgets.QTableWidget()
-        self.recipe_details_edit = QtWidgets.QPlainTextEdit()
+        self.recipe_details_edit = QtWidgets.QTextEdit()
         self.status_label = QtWidgets.QLabel()
         self.scale_combo = QtWidgets.QComboBox()
         self._refreshing_tables = False
@@ -64,6 +68,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._setup_theme_actions()
         self._setup_layout()
         self._sync_scale_combo()
+        self._apply_saved_gui_preferences()
         self.refresh()
 
     def _setup_actions(self) -> None:
@@ -554,6 +559,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self._set_zoom_steps(0)
 
     def _set_zoom_steps(self, steps: int) -> None:
+        self._set_zoom_steps_impl(steps, persist=True)
+
+    def _set_zoom_steps_impl(self, steps: int, *, persist: bool) -> None:
         steps = max(-5, min(steps, 8))
         if steps == self._zoom_steps:
             return
@@ -570,6 +578,9 @@ class MainWindow(QtWidgets.QMainWindow):
             app.setFont(font)
 
         self._resize_table_rows()
+        if persist:
+            self.user_config.gui_zoom_steps = self._zoom_steps
+            self._save_user_config()
 
     def _handle_theme_action(self) -> None:
         action = self.sender()
@@ -577,8 +588,8 @@ class MainWindow(QtWidgets.QMainWindow):
             return
 
         theme_name = action.data()
-        if isinstance(theme_name, str):
-            self._apply_theme(theme_name)
+        if theme_name in ("system", "light", "dark"):
+            self._set_theme(theme_name, persist=True)
 
     def _handle_style_action(self) -> None:
         action = self.sender()
@@ -587,9 +598,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
         style_name = action.data()
         if isinstance(style_name, str):
-            QtWidgets.QApplication.setStyle(style_name)
+            self._set_style(style_name, persist=True)
 
-    def _apply_theme(self, theme_name: ThemeName) -> None:
+    def _set_theme(self, theme_name: ThemeName, *, persist: bool) -> None:
         app = QtWidgets.QApplication.instance()
         if not isinstance(app, QtWidgets.QApplication):
             return
@@ -603,6 +614,54 @@ class MainWindow(QtWidgets.QMainWindow):
         elif theme_name == "dark":
             app.setPalette(self._make_dark_palette())
             app.setStyleSheet(self._make_dark_stylesheet())
+        else:
+            return
+
+        self._check_action_by_data(self.theme_action_group, theme_name)
+        if persist:
+            self.user_config.gui_theme = theme_name
+            self._save_user_config()
+
+    def _set_style(self, style_name: StyleName, *, persist: bool) -> None:
+        available_styles = {style.lower(): style for style in QtWidgets.QStyleFactory.keys()}
+        actual_style_name = available_styles.get(style_name.lower())
+        if actual_style_name is None:
+            return
+
+        QtWidgets.QApplication.setStyle(actual_style_name)
+        self._check_action_by_data(self.style_action_group, actual_style_name)
+        if persist:
+            self.user_config.gui_style = actual_style_name
+            self._save_user_config()
+
+    def _apply_saved_gui_preferences(self) -> None:
+        saved_style = self.user_config.gui_style
+        if saved_style is not None:
+            available_styles = {
+                style.lower(): style for style in QtWidgets.QStyleFactory.keys()
+            }
+            if saved_style.lower() in available_styles:
+                self._set_style(saved_style, persist=False)
+            else:
+                self.user_config.gui_style = None
+                self._save_user_config()
+
+        self._set_theme(self.user_config.gui_theme, persist=False)
+        self._set_zoom_steps_impl(self.user_config.gui_zoom_steps, persist=False)
+
+    @staticmethod
+    def _check_action_by_data(
+        action_group: QtGui.QActionGroup,
+        data: str,
+    ) -> None:
+        for action in action_group.actions():
+            action_data = action.data()
+            if isinstance(action_data, str) and action_data.lower() == data.lower():
+                action.setChecked(True)
+                return
+
+    def _save_user_config(self) -> None:
+        sr_config.save_config(self.user_config)
 
     def _set_recipe_scale(self, scale: fr.Fraction) -> None:
         goal_class_name = (
@@ -723,7 +782,7 @@ class MainWindow(QtWidgets.QMainWindow):
             QTabBar::tab:hover {
                 background-color: #dbeafe;
             }
-            QLineEdit, QPlainTextEdit, QListWidget, QTableWidget, QComboBox {
+            QLineEdit, QTextEdit, QPlainTextEdit, QListWidget, QTableWidget, QComboBox {
                 background-color: #ffffff;
                 color: #000000;
                 border: 1px solid #b8b8b8;
@@ -802,7 +861,7 @@ class MainWindow(QtWidgets.QMainWindow):
             QTabBar::tab:hover {
                 background-color: #4b5563;
             }
-            QLineEdit, QPlainTextEdit, QListWidget, QTableWidget, QComboBox {
+            QLineEdit, QTextEdit, QPlainTextEdit, QListWidget, QTableWidget, QComboBox {
                 background-color: #1e1e1e;
                 color: #ffffff;
                 border: 1px solid #5a5a5a;
@@ -883,9 +942,9 @@ class MainWindow(QtWidgets.QMainWindow):
         details: list[str] = []
         recipes = sorted(chain.recipes.items(), key=lambda pair: pair[0].name.lower())
         for recipe, count in recipes:
-            details.append(recipe.make_pretty_str(scale=count))
+            details.append(recipe_format.recipe_details_html(recipe, count))
 
-        self.recipe_details_edit.setPlainText("\n\n".join(details))
+        self.recipe_details_edit.setHtml(recipe_format.recipe_details_document_html(details))
 
     def _fill_net_table(
         self,

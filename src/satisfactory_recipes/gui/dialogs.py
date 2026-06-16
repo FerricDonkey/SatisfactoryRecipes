@@ -9,6 +9,7 @@ from PySide6 import QtCore, QtWidgets
 
 from satisfactory_recipes import info_classes as ic
 from satisfactory_recipes import search
+from satisfactory_recipes.gui import recipe_format
 
 
 class GoalDialogAction(enum.Enum):
@@ -242,7 +243,7 @@ class RecipeSearchDialog(QtWidgets.QDialog):
         self.recipe_list.setSelectionMode(
             QtWidgets.QAbstractItemView.SelectionMode.SingleSelection
         )
-        self.details = QtWidgets.QPlainTextEdit()
+        self.details = QtWidgets.QTextEdit()
         self.details.setReadOnly(True)
 
         buttons = QtWidgets.QDialogButtonBox(
@@ -303,7 +304,11 @@ class RecipeSearchDialog(QtWidgets.QDialog):
             ic.Recipe,
             selected_items[0].data(QtCore.Qt.ItemDataRole.UserRole),
         )
-        self.details.setPlainText(recipe.make_pretty_str())
+        self.details.setHtml(
+            recipe_format.recipe_details_document_html(
+                [recipe_format.recipe_details_html(recipe, fr.Fraction(1))]
+            )
+        )
 
     def _accept_recipe(self, item: QtWidgets.QListWidgetItem) -> None:
         amount = self._get_amount_if_needed()

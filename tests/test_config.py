@@ -79,7 +79,13 @@ def test_resolve_docs_path_discards_stale_paths_and_saves_clean_config(
         sr_config.resolve_docs_path(config_path=config_path, warn=warnings.append)
 
     saved = json.loads(config_path.read_text())
-    assert saved == {"docs_path": None, "game_path": None}
+    assert saved == {
+        "docs_path": None,
+        "game_path": None,
+        "gui_theme": "system",
+        "gui_style": None,
+        "gui_zoom_steps": 0,
+    }
     assert any("Configured docs_path" in warning for warning in warnings)
     assert any("Configured game_path" in warning for warning in warnings)
 

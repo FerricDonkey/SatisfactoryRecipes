@@ -1,6 +1,7 @@
 """User configuration and Satisfactory docs discovery."""
 
 import collections.abc as cabc
+import typing as ty
 import pathlib
 import string
 import sys
@@ -26,6 +27,9 @@ class Configuration(pydantic.BaseModel):
 
     docs_path: pathlib.Path | None = None
     game_path: pathlib.Path | None = None
+    gui_theme: ty.Literal["system", "light", "dark"] = "system"
+    gui_style: str | None = None
+    gui_zoom_steps: int = 0
 
 
 def _default_warn(message: str) -> None:

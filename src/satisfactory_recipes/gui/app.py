@@ -6,6 +6,7 @@ import sys
 
 from PySide6 import QtCore, QtWidgets
 
+from satisfactory_recipes import config as sr_config
 from satisfactory_recipes import info_classes as ic
 from satisfactory_recipes import production_chain as pc
 from satisfactory_recipes.gui import main_window
@@ -22,6 +23,7 @@ def main(
     if app is None:
         app = QtWidgets.QApplication(sys.argv[:1])
 
+    user_config = sr_config.load_config()
     game_data = ic.GameData.from_json(docs_path)
     production_chain = None
     if filename is not None:
@@ -32,6 +34,7 @@ def main(
     window = main_window.MainWindow(
         docs_path=docs_path,
         game_data=game_data,
+        user_config=user_config,
         production_chain=production_chain,
         filename=filename,
     )
