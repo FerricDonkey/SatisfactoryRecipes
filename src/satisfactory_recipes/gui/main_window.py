@@ -10,6 +10,10 @@ from satisfactory_recipes import production_chain as pc
 from satisfactory_recipes.gui import dialogs
 
 
+type ThemeName = str
+type StyleName = str
+
+
 class MainWindow(QtWidgets.QMainWindow):
     """Top-level GUI window for a production chain."""
 
@@ -38,6 +42,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.production_chain = production_chain
         self.filename = filename
         self.has_unsaved_changes = False
+        self._default_palette = QtWidgets.QApplication.palette()
+        self._default_style_name = QtWidgets.QApplication.style().objectName()
 
         self.setWindowTitle("Satisfactory Recipes")
         self.resize(1100, 760)
@@ -52,6 +58,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._updating_scale_combo = False
 
         self._setup_actions()
+        self._setup_theme_actions()
         self._setup_layout()
         self._sync_scale_combo()
         self.refresh()
@@ -90,6 +97,36 @@ class MainWindow(QtWidgets.QMainWindow):
         recipe_menu = self.menuBar().addMenu("Recipes")
         recipe_menu.addAction(self.add_goal_recipe_action)
         recipe_menu.addAction(self.add_shortage_recipe_action)
+
+    def _setup_theme_actions(self) -> None:
+        options_menu = self.menuBar().addMenu("Options")
+
+        theme_menu = options_menu.addMenu("Theme")
+        self.theme_action_group = QtGui.QActionGroup(self)
+        self.theme_action_group.setExclusive(True)
+        for theme_name in ("System", "Light", "Dark"):
+            action = QtGui.QAction(theme_name, self)
+            action.setCheckable(True)
+            action.setData(theme_name.lower())
+            if theme_name == "System":
+                action.setChecked(True)
+            action.triggered.connect(self._handle_theme_action)
+            self.theme_action_group.addAction(action)
+            theme_menu.addAction(action)
+
+        style_menu = options_menu.addMenu("Qt Style")
+        self.style_action_group = QtGui.QActionGroup(self)
+        self.style_action_group.setExclusive(True)
+        current_style_name = self._default_style_name.lower()
+        for style_name in QtWidgets.QStyleFactory.keys():
+            action = QtGui.QAction(style_name, self)
+            action.setCheckable(True)
+            action.setData(style_name)
+            if style_name.lower() == current_style_name:
+                action.setChecked(True)
+            action.triggered.connect(self._handle_style_action)
+            self.style_action_group.addAction(action)
+            style_menu.addAction(action)
 
     def _setup_layout(self) -> None:
         central = QtWidgets.QWidget()
@@ -450,6 +487,39 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self._set_recipe_scale(scale)
 
+    def _handle_theme_action(self) -> None:
+        action = self.sender()
+        if not isinstance(action, QtGui.QAction):
+            return
+
+        theme_name = action.data()
+        if isinstance(theme_name, str):
+            self._apply_theme(theme_name)
+
+    def _handle_style_action(self) -> None:
+        action = self.sender()
+        if not isinstance(action, QtGui.QAction):
+            return
+
+        style_name = action.data()
+        if isinstance(style_name, str):
+            QtWidgets.QApplication.setStyle(style_name)
+
+    def _apply_theme(self, theme_name: ThemeName) -> None:
+        app = QtWidgets.QApplication.instance()
+        if not isinstance(app, QtWidgets.QApplication):
+            return
+
+        if theme_name == "system":
+            app.setPalette(self._default_palette)
+            app.setStyleSheet("")
+        elif theme_name == "light":
+            app.setPalette(self._make_light_palette())
+            app.setStyleSheet(self._make_light_stylesheet())
+        elif theme_name == "dark":
+            app.setPalette(self._make_dark_palette())
+            app.setStyleSheet(self._make_dark_stylesheet())
+
     def _set_recipe_scale(self, scale: fr.Fraction) -> None:
         goal_class_name = (
             self.production_chain.goal.class_name
@@ -479,6 +549,193 @@ class MainWindow(QtWidgets.QMainWindow):
         if self.has_unsaved_changes:
             return " *"
         return ""
+
+    @staticmethod
+    def _make_light_palette() -> QtGui.QPalette:
+        palette = QtGui.QPalette()
+        palette.setColor(QtGui.QPalette.ColorRole.Window, QtGui.QColor(245, 245, 245))
+        palette.setColor(QtGui.QPalette.ColorRole.WindowText, QtCore.Qt.GlobalColor.black)
+        palette.setColor(QtGui.QPalette.ColorRole.Base, QtGui.QColor(255, 255, 255))
+        palette.setColor(QtGui.QPalette.ColorRole.AlternateBase, QtGui.QColor(240, 240, 240))
+        palette.setColor(QtGui.QPalette.ColorRole.Text, QtCore.Qt.GlobalColor.black)
+        palette.setColor(QtGui.QPalette.ColorRole.Button, QtGui.QColor(245, 245, 245))
+        palette.setColor(QtGui.QPalette.ColorRole.ButtonText, QtCore.Qt.GlobalColor.black)
+        palette.setColor(QtGui.QPalette.ColorRole.Highlight, QtGui.QColor(0, 120, 215))
+        palette.setColor(QtGui.QPalette.ColorRole.HighlightedText, QtCore.Qt.GlobalColor.white)
+        return palette
+
+    @staticmethod
+    def _make_dark_palette() -> QtGui.QPalette:
+        palette = QtGui.QPalette()
+        palette.setColor(QtGui.QPalette.ColorRole.Window, QtGui.QColor(45, 45, 48))
+        palette.setColor(QtGui.QPalette.ColorRole.WindowText, QtCore.Qt.GlobalColor.white)
+        palette.setColor(QtGui.QPalette.ColorRole.Base, QtGui.QColor(30, 30, 30))
+        palette.setColor(QtGui.QPalette.ColorRole.AlternateBase, QtGui.QColor(45, 45, 48))
+        palette.setColor(QtGui.QPalette.ColorRole.Text, QtCore.Qt.GlobalColor.white)
+        palette.setColor(QtGui.QPalette.ColorRole.Button, QtGui.QColor(45, 45, 48))
+        palette.setColor(QtGui.QPalette.ColorRole.ButtonText, QtCore.Qt.GlobalColor.white)
+        palette.setColor(QtGui.QPalette.ColorRole.BrightText, QtCore.Qt.GlobalColor.red)
+        palette.setColor(QtGui.QPalette.ColorRole.Highlight, QtGui.QColor(0, 120, 215))
+        palette.setColor(QtGui.QPalette.ColorRole.HighlightedText, QtCore.Qt.GlobalColor.white)
+        return palette
+
+    @staticmethod
+    def _make_light_stylesheet() -> str:
+        return """
+            QWidget {
+                background-color: #f5f5f5;
+                color: #000000;
+            }
+            QMenuBar {
+                background-color: #f5f5f5;
+                color: #000000;
+            }
+            QMenuBar::item:selected {
+                background-color: #dbeafe;
+                color: #000000;
+            }
+            QMenu {
+                background-color: #ffffff;
+                color: #000000;
+                border: 1px solid #b8b8b8;
+            }
+            QMenu::item:selected {
+                background-color: #0078d7;
+                color: #ffffff;
+            }
+            QPushButton {
+                background-color: #ffffff;
+                color: #000000;
+                border: 1px solid #9ca3af;
+                padding: 4px 10px;
+            }
+            QPushButton:hover {
+                background-color: #e5f1fb;
+                border-color: #0078d7;
+            }
+            QPushButton:pressed {
+                background-color: #cce4f7;
+            }
+            QPushButton:disabled {
+                background-color: #eeeeee;
+                color: #777777;
+                border-color: #c8c8c8;
+            }
+            QTabWidget::pane {
+                border: 1px solid #b8b8b8;
+                background-color: #ffffff;
+            }
+            QTabBar::tab {
+                background-color: #e5e7eb;
+                color: #000000;
+                border: 1px solid #b8b8b8;
+                padding: 5px 12px;
+            }
+            QTabBar::tab:selected {
+                background-color: #ffffff;
+                color: #000000;
+                border-bottom-color: #ffffff;
+            }
+            QTabBar::tab:hover {
+                background-color: #dbeafe;
+            }
+            QLineEdit, QPlainTextEdit, QListWidget, QTableWidget, QComboBox {
+                background-color: #ffffff;
+                color: #000000;
+                border: 1px solid #b8b8b8;
+                selection-background-color: #0078d7;
+                selection-color: #ffffff;
+            }
+            QHeaderView::section {
+                background-color: #e5e7eb;
+                color: #000000;
+                border: 1px solid #b8b8b8;
+                padding: 3px;
+            }
+            QTableCornerButton::section {
+                background-color: #e5e7eb;
+                border: 1px solid #b8b8b8;
+            }
+        """
+
+    @staticmethod
+    def _make_dark_stylesheet() -> str:
+        return """
+            QWidget {
+                background-color: #2d2d30;
+                color: #ffffff;
+            }
+            QMenuBar {
+                background-color: #2d2d30;
+                color: #ffffff;
+            }
+            QMenuBar::item:selected {
+                background-color: #3e3e42;
+                color: #ffffff;
+            }
+            QMenu {
+                background-color: #1e1e1e;
+                color: #ffffff;
+                border: 1px solid #5a5a5a;
+            }
+            QMenu::item:selected {
+                background-color: #0078d7;
+                color: #ffffff;
+            }
+            QPushButton {
+                background-color: #3e3e42;
+                color: #ffffff;
+                border: 1px solid #6b7280;
+                padding: 4px 10px;
+            }
+            QPushButton:hover {
+                background-color: #4b5563;
+                border-color: #60a5fa;
+            }
+            QPushButton:pressed {
+                background-color: #374151;
+            }
+            QPushButton:disabled {
+                background-color: #303033;
+                color: #8a8a8a;
+                border-color: #555555;
+            }
+            QTabWidget::pane {
+                border: 1px solid #5a5a5a;
+                background-color: #1e1e1e;
+            }
+            QTabBar::tab {
+                background-color: #3e3e42;
+                color: #ffffff;
+                border: 1px solid #5a5a5a;
+                padding: 5px 12px;
+            }
+            QTabBar::tab:selected {
+                background-color: #1e1e1e;
+                color: #ffffff;
+                border-bottom-color: #1e1e1e;
+            }
+            QTabBar::tab:hover {
+                background-color: #4b5563;
+            }
+            QLineEdit, QPlainTextEdit, QListWidget, QTableWidget, QComboBox {
+                background-color: #1e1e1e;
+                color: #ffffff;
+                border: 1px solid #5a5a5a;
+                selection-background-color: #0078d7;
+                selection-color: #ffffff;
+            }
+            QHeaderView::section {
+                background-color: #3e3e42;
+                color: #ffffff;
+                border: 1px solid #5a5a5a;
+                padding: 3px;
+            }
+            QTableCornerButton::section {
+                background-color: #3e3e42;
+                border: 1px solid #5a5a5a;
+            }
+        """
 
     def _selected_scale(self) -> fr.Fraction | None:
         data = self.scale_combo.currentData()
