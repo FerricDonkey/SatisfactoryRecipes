@@ -3,6 +3,7 @@ Contains basic classes for things like recipes, items, buildings
 """
 
 import abc
+import copy
 import dataclasses
 import enum
 import fractions as fr
@@ -90,7 +91,7 @@ class MatterState(enum.StrEnum):
 @dataclasses.dataclass(frozen=True, kw_only=True, slots=True, order=True)
 class Item(_BaseInfo):
     name: str
-    matter_state: str
+    matter_state: MatterState
     stack_size: int
     resource_sink_points: int
     is_resource: bool
@@ -195,11 +196,23 @@ class RecipeRaw(_BaseInfo):
         )
 
 
+def round_half_up(value: fr.Fraction) -> fr.Fraction:
+    """
+    Round positive Fraction to nearest int, with .5 rounded up.
+    """
+    quotient, remainder = divmod(value.numerator, value.denominator)
+
+    if remainder * 2 >= value.denominator:
+        return fr.Fraction(quotient + 1, 1)
+
+    return fr.Fraction(quotient, 1)
+
+
 @dataclasses.dataclass(frozen=True, kw_only=True, slots=True, order=True)
 class Recipe(_BaseInfo):
     name: str
-    consume: sc.ScalableCounter[Item]
-    consume_per_min: sc.ScalableCounter[Item]
+    inputs: sc.ScalableCounter[Item]
+    inputs_per_min: sc.ScalableCounter[Item]
     products: sc.ScalableCounter[Item]
     products_per_min: sc.ScalableCounter[Item]
     produced_in: Building | None
@@ -207,6 +220,40 @@ class Recipe(_BaseInfo):
     _variable_part_mean_power_draw: (
         fr.Fraction
     )  # From raw recipe, for variable things only
+
+    @staticmethod
+    def scale_one_input(
+        amount: fr.Fraction,
+        factor: fr.Fraction,
+        is_fluid: bool,
+    ) -> fr.Fraction:
+        # fluid is internally tracked and rounds at 1000x display value
+        if is_fluid:
+            amount *= 1000
+        amount *= factor
+        amount = max(round_half_up(amount), fr.Fraction(1, 1))
+
+        # Undo the fluid scaling
+        if is_fluid:
+            amount /= 1000
+        return amount
+
+    def create_scaled(self, factor: fr.Fraction) -> ty.Self:
+        """Return a new recipes, scaling inputs by factor, handling rounding as done in 1.2."""
+        new_inputs = sc.ScalableCounter[Item]({
+            item: self.scale_one_input(amount, factor, item.is_fluid)
+            for item, amount in self.inputs.items()
+        })
+        new_inputs_per_min = sc.ScalableCounter[Item]({
+            item: self.scale_one_input(amount, factor, item.is_fluid)
+            for item, amount in self.inputs_per_min.items()
+        })
+
+        return copy.replace(
+            self,
+            inputs=new_inputs,
+            inputs_per_min=new_inputs_per_min,
+        )
 
     @property
     def mean_power(self) -> fr.Fraction:
@@ -234,10 +281,10 @@ class Recipe(_BaseInfo):
             desc += f"\n      - {item.name} x {per_craft:.1f} ({per_min:.3f}/min)"
 
         desc += "\n    Consume:"
-        for item, per_min in self.consume_per_min.items():
+        for item, per_min in self.inputs_per_min.items():
             if scale is not None:
                 per_min *= scale
-            per_craft = self.consume[item]
+            per_craft = self.inputs[item]
             desc += f"\n      - {item.name} x {per_craft:.1f} ({per_min:.3f}/min)"
 
         if self.produced_in:
@@ -318,8 +365,8 @@ class Recipe(_BaseInfo):
         return cls(
             class_name=base_recipe.class_name,
             name=base_recipe.name,
-            consume=consume,
-            consume_per_min=consume_per_min,
+            inputs=consume,
+            inputs_per_min=consume_per_min,
             products=products,
             products_per_min=products_per_min,
             produced_in=buildings[0] if buildings else None,
@@ -340,6 +387,12 @@ class GameData:
     buildings_d: dict[str, Building]
     items_d: dict[str, Item]
     recipes_d: dict[str, Recipe]
+
+    def scale_recipes(self, factor: fr.Fraction) -> None:
+        """Replace recipes with scaled version."""
+        self.recipes_d |= {
+            key: value.create_scaled(factor) for key, value in self.recipes_d.items()
+        }
 
     @classmethod
     def from_json(cls, docs_json: pathlib.Path) -> ty.Self:

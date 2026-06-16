@@ -80,7 +80,7 @@ class ProductionChain:
         net = sc.ScalableCounter[ic.Item]()
         for recipe, count in self.recipes.items():
             net += recipe.products_per_min * count
-            net -= recipe.consume_per_min * count
+            net -= recipe.inputs_per_min * count
 
         to_del = [item for item, amount in net.items() if amount == 0]
         for item in to_del:
@@ -111,7 +111,7 @@ class ProductionChain:
     ) -> sc.ScalableCounter[ic.Item]:
         consumed = sum(
             (
-                recipe.consume_per_min * recipe_count
+                recipe.inputs_per_min * recipe_count
                 for recipe, recipe_count in self.recipes.items()
             ),
             start=sc.ScalableCounter[ic.Item](),
