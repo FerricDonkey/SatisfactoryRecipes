@@ -14,6 +14,7 @@ import typing as ty
 
 from satisfactory_recipes import stupid_classes as sc
 
+
 @dataclasses.dataclass(frozen=True, kw_only=True, slots=True, order=True)
 class _BaseInfo(abc.ABC):
     class_name: str  # Used as key in dictionaries
@@ -232,7 +233,7 @@ class Recipe(_BaseInfo):
             amount /= 1000
         return amount
 
-    def create_scaled(self, factor: fr.Fraction) -> ty.Self:
+    def create_scaled(self, factor: fr.Fraction) -> Recipe:
         """Return a new recipes, scaling inputs by factor, handling rounding as done in 1.2."""
         new_inputs = sc.ScalableCounter[Item](
             {

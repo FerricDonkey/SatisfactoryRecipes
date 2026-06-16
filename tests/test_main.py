@@ -1,3 +1,4 @@
+import argparse
 import fractions as fr
 import pathlib
 
@@ -55,9 +56,9 @@ def test_parser_supports_cli_subcommand() -> None:
 
 def test_dispatch_runs_cli(monkeypatch: pytest.MonkeyPatch) -> None:
     args = main.make_parser().parse_args(["cli"])
-    calls = []
+    calls: list[argparse.Namespace] = []
 
-    def fake_run_cli(parsed_args) -> None:
+    def fake_run_cli(parsed_args: argparse.Namespace) -> None:
         calls.append(parsed_args)
 
     monkeypatch.setattr(main, "run_cli", fake_run_cli)
