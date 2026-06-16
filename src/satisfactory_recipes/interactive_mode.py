@@ -290,7 +290,7 @@ class InteractiveRunner:
     def save(self) -> None:
         path = get_path_no_exists("Enter path to save data")
         try:
-            self.production_chain.save(path)
+            self.production_chain.save(path, scale=self.game_data.scale)
             print(f"Saved to {path.resolve()}\n")
         except Exception:
             traceback.print_exc()
