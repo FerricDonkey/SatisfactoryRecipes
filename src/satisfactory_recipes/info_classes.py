@@ -393,9 +393,11 @@ class GameData:
     buildings_d: dict[str, Building]
     items_d: dict[str, Item]
     recipes_d: dict[str, Recipe]
+    scale: fr.Fraction = fr.Fraction(1)
 
     def scale_recipes(self, factor: fr.Fraction) -> None:
         """Replace recipes with scaled version."""
+        self.scale *= factor
         self.recipes_d |= {
             key: value.create_scaled(factor) for key, value in self.recipes_d.items()
         }

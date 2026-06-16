@@ -2,6 +2,8 @@
 
 import collections.abc as cabc
 import fractions as fr
+import json
+import pathlib
 
 import pytest
 
@@ -92,7 +94,7 @@ def test_production_chain_no_crash() -> None:
 
 def make_fake_item(
     name: str,
-    matter_state: ic.MatterState,
+    matter_state: ic.MatterState = ic.MatterState.SOLID,
 ) -> ic.Item:
     return ic.Item(
         class_name=name,
@@ -106,6 +108,8 @@ def make_fake_item(
 
 def make_fake_recipe(
     *,
+    class_name: str = "Recipe_Fake_C",
+    name: str | None = None,
     inputs: dict[ic.Item, fr.Fraction],
     products: dict[ic.Item, fr.Fraction] | None = None,
     craft_time: fr.Fraction = fr.Fraction(60),
@@ -113,9 +117,12 @@ def make_fake_recipe(
     if products is None:
         products = {}
 
+    if name is None:
+        name = class_name
+
     return ic.Recipe(
-        class_name="fake",
-        name="fake",
+        class_name=class_name,
+        name=name,
         inputs=sc.ScalableCounter[ic.Item](inputs, frozen=True),
         inputs_per_min=sc.ScalableCounter[ic.Item](
             {
@@ -136,6 +143,45 @@ def make_fake_recipe(
         craft_time=craft_time,
         _variable_part_mean_power_draw=fr.Fraction(0),
     )
+
+
+def make_fake_game_data(
+    *,
+    items: list[ic.Item],
+    recipes: list[ic.Recipe],
+    scale: fr.Fraction = fr.Fraction(1),
+) -> ic.GameData:
+    return ic.GameData(
+        buildings_d={},
+        items_d={item.class_name: item for item in items},
+        recipes_d={recipe.class_name: recipe for recipe in recipes},
+        scale=scale,
+    )
+
+
+def write_chain_json(
+    filename: pathlib.Path,
+    *,
+    goal_class_name: str = "Desc_Ingot_C",
+    recipes: dict[str, str] | None = None,
+    recipe_input_scale: str = "1/4",
+    save_file_version: int = 1,
+    extra: dict[str, object] | None = None,
+) -> None:
+    if recipes is None:
+        recipes = {"Recipe_Ingot_C": "1"}
+
+    data: dict[str, object] = {
+        "goal_class_name": goal_class_name,
+        "recipes": recipes,
+        "recipe_input_scale": recipe_input_scale,
+        "save_file_version": save_file_version,
+    }
+
+    if extra:
+        data.update(extra)
+
+    filename.write_text(json.dumps(data))
 
 
 @pytest.mark.parametrize(
@@ -240,3 +286,245 @@ def test_recipe_scaling_freezes_new_input_counters() -> None:
 
     with pytest.raises(TypeError):
         scaled.inputs_per_min[item] = fr.Fraction(999)
+
+
+def test_production_chain_save_load_round_trips(tmp_path: pathlib.Path) -> None:
+    ore = make_fake_item("Desc_Ore_C")
+    ingot = make_fake_item("Desc_Ingot_C")
+    plate = make_fake_item("Desc_Plate_C")
+
+    ingot_recipe = make_fake_recipe(
+        class_name="Recipe_Ingot_C",
+        inputs={ore: fr.Fraction(4)},
+        products={ingot: fr.Fraction(1)},
+    )
+    plate_recipe = make_fake_recipe(
+        class_name="Recipe_Plate_C",
+        inputs={ingot: fr.Fraction(4)},
+        products={plate: fr.Fraction(1)},
+    )
+
+    game_data = make_fake_game_data(
+        items=[ore, ingot, plate],
+        recipes=[ingot_recipe, plate_recipe],
+    )
+
+    chain = pc.ProductionChain(
+        goal=plate,
+        recipes=sc.ScalableCounter[ic.Recipe]({
+            ingot_recipe: fr.Fraction(3, 2),
+            plate_recipe: fr.Fraction(4),
+        }),
+    )
+
+    filename = tmp_path / "chain.json"
+    chain.save(filename, scale=fr.Fraction(1, 4))
+
+    loaded = pc.ProductionChain.load(filename, game_data)
+
+    assert loaded.goal == plate
+    assert game_data.scale == fr.Fraction(1, 4)
+
+    loaded_recipe_counts = {
+        recipe.class_name: count for recipe, count in loaded.recipes.items()
+    }
+
+    assert loaded_recipe_counts == {
+        "Recipe_Ingot_C": fr.Fraction(3, 2),
+        "Recipe_Plate_C": fr.Fraction(4),
+    }
+
+
+def test_production_chain_save_file_shape(tmp_path: pathlib.Path) -> None:
+    ore = make_fake_item("Desc_Ore_C")
+    ingot = make_fake_item("Desc_Ingot_C")
+
+    recipe = make_fake_recipe(
+        class_name="Recipe_Ingot_C",
+        inputs={ore: fr.Fraction(4)},
+        products={ingot: fr.Fraction(1)},
+    )
+
+    chain = pc.ProductionChain(
+        goal=ingot,
+        recipes=sc.ScalableCounter[ic.Recipe]({recipe: fr.Fraction(7, 3)}),
+    )
+
+    filename = tmp_path / "chain.json"
+    chain.save(filename, scale=fr.Fraction(1, 4))
+
+    raw = json.loads(filename.read_text())
+
+    assert raw == {
+        "goal_class_name": "Desc_Ingot_C",
+        "recipes": {
+            "Recipe_Ingot_C": "7/3",
+        },
+        "recipe_input_scale": "1/4",
+        "save_file_version": 1,
+    }
+
+
+def test_load_uses_scaled_recipe_objects(tmp_path: pathlib.Path) -> None:
+    ore = make_fake_item("Desc_Ore_C")
+    ingot = make_fake_item("Desc_Ingot_C")
+
+    recipe = make_fake_recipe(
+        class_name="Recipe_Ingot_C",
+        inputs={ore: fr.Fraction(8)},
+        products={ingot: fr.Fraction(1)},
+    )
+
+    game_data = make_fake_game_data(
+        items=[ore, ingot],
+        recipes=[recipe],
+        scale=fr.Fraction(1),
+    )
+
+    filename = tmp_path / "chain.json"
+    write_chain_json(
+        filename,
+        goal_class_name="Desc_Ingot_C",
+        recipes={"Recipe_Ingot_C": "2"},
+        recipe_input_scale="1/4",
+    )
+
+    loaded = pc.ProductionChain.load(filename, game_data)
+
+    loaded_recipe = next(iter(loaded.recipes))
+
+    assert loaded_recipe.class_name == "Recipe_Ingot_C"
+    assert loaded_recipe.inputs[ore] == fr.Fraction(2)
+    assert loaded.recipes[loaded_recipe] == fr.Fraction(2)
+
+    assert game_data.scale == fr.Fraction(1, 4)
+    assert game_data.recipes_d["Recipe_Ingot_C"].inputs[ore] == fr.Fraction(2)
+
+
+def test_load_rejects_unsupported_save_version_without_scaling(
+    tmp_path: pathlib.Path,
+) -> None:
+    ore = make_fake_item("Desc_Ore_C")
+    ingot = make_fake_item("Desc_Ingot_C")
+    recipe = make_fake_recipe(
+        class_name="Recipe_Ingot_C",
+        inputs={ore: fr.Fraction(4)},
+        products={ingot: fr.Fraction(1)},
+    )
+
+    game_data = make_fake_game_data(
+        items=[ore, ingot],
+        recipes=[recipe],
+    )
+
+    filename = tmp_path / "chain.json"
+    write_chain_json(filename, save_file_version=999)
+
+    with pytest.raises(ValueError, match="Unsupported production chain save version"):
+        pc.ProductionChain.load(filename, game_data)
+
+    assert game_data.scale == fr.Fraction(1)
+    assert game_data.recipes_d["Recipe_Ingot_C"].inputs[ore] == fr.Fraction(4)
+
+
+def test_load_rejects_missing_goal_item_without_scaling(
+    tmp_path: pathlib.Path,
+) -> None:
+    ore = make_fake_item("Desc_Ore_C")
+    ingot = make_fake_item("Desc_Ingot_C")
+    recipe = make_fake_recipe(
+        class_name="Recipe_Ingot_C",
+        inputs={ore: fr.Fraction(4)},
+        products={ingot: fr.Fraction(1)},
+    )
+
+    game_data = make_fake_game_data(
+        items=[ore, ingot],
+        recipes=[recipe],
+    )
+
+    filename = tmp_path / "chain.json"
+    write_chain_json(filename, goal_class_name="Desc_Missing_C")
+
+    with pytest.raises(ValueError, match="goal item not found"):
+        pc.ProductionChain.load(filename, game_data)
+
+    assert game_data.scale == fr.Fraction(1)
+    assert game_data.recipes_d["Recipe_Ingot_C"].inputs[ore] == fr.Fraction(4)
+
+
+def test_load_rejects_missing_recipe_without_scaling(
+    tmp_path: pathlib.Path,
+) -> None:
+    ore = make_fake_item("Desc_Ore_C")
+    ingot = make_fake_item("Desc_Ingot_C")
+
+    game_data = make_fake_game_data(
+        items=[ore, ingot],
+        recipes=[],
+    )
+
+    filename = tmp_path / "chain.json"
+    write_chain_json(
+        filename,
+        recipes={"Recipe_Missing_C": "1"},
+    )
+
+    with pytest.raises(
+        ValueError, match="Save file recipe not found in current game data"
+    ):
+        pc.ProductionChain.load(filename, game_data)
+
+    assert game_data.scale == fr.Fraction(1)
+
+
+def test_load_rejects_extra_save_fields_without_scaling(
+    tmp_path: pathlib.Path,
+) -> None:
+    ore = make_fake_item("Desc_Ore_C")
+    ingot = make_fake_item("Desc_Ingot_C")
+    recipe = make_fake_recipe(
+        class_name="Recipe_Ingot_C",
+        inputs={ore: fr.Fraction(4)},
+        products={ingot: fr.Fraction(1)},
+    )
+
+    game_data = make_fake_game_data(
+        items=[ore, ingot],
+        recipes=[recipe],
+    )
+
+    filename = tmp_path / "chain.json"
+    write_chain_json(filename, extra={"surprise": "nope"})
+
+    with pytest.raises(Exception, match="surprise"):
+        pc.ProductionChain.load(filename, game_data)
+
+    assert game_data.scale == fr.Fraction(1)
+    assert game_data.recipes_d["Recipe_Ingot_C"].inputs[ore] == fr.Fraction(4)
+
+
+def test_game_data_scale_recipes_replaces_recipes_and_updates_scale() -> None:
+    ore = make_fake_item("Desc_Ore_C")
+    ingot = make_fake_item("Desc_Ingot_C")
+
+    recipe = make_fake_recipe(
+        class_name="Recipe_Ingot_C",
+        inputs={ore: fr.Fraction(8)},
+        products={ingot: fr.Fraction(1)},
+    )
+
+    game_data = make_fake_game_data(
+        items=[ore, ingot],
+        recipes=[recipe],
+    )
+
+    old_recipe = game_data.recipes_d["Recipe_Ingot_C"]
+
+    game_data.scale_recipes(fr.Fraction(1, 4))
+
+    new_recipe = game_data.recipes_d["Recipe_Ingot_C"]
+
+    assert game_data.scale == fr.Fraction(1, 4)
+    assert new_recipe is not old_recipe
+    assert new_recipe.inputs[ore] == fr.Fraction(2)

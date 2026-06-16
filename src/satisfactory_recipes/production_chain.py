@@ -3,12 +3,13 @@ Actual production chain logic
 """
 
 import dataclasses
-import fractions
-import json
+import fractions as fr
 import math
 import pathlib
 import sys
 import typing as ty
+
+import pydantic
 
 from satisfactory_recipes import info_classes as ic
 from satisfactory_recipes import stupid_classes as sc
@@ -142,7 +143,7 @@ class ProductionChain:
             )
 
         try:
-            self.recipes[recipe] += fractions.Fraction(
+            self.recipes[recipe] += fr.Fraction(
                 amount_needed,
                 recipe.products_per_min[item],
             )
@@ -152,7 +153,7 @@ class ProductionChain:
                 f"Wanted to use it to make {item}"
             ) from exc
 
-    def scale_item(self, item: ic.Item, amount: fractions.Fraction) -> None:
+    def scale_item(self, item: ic.Item, amount: fr.Fraction) -> None:
         """
         Scale to match input/output of items.
         """
@@ -162,31 +163,67 @@ class ProductionChain:
         net = self.get_net_per_min()
         current_amount = abs(net[item])
         amount = abs(amount)
-        self.recipes *= fractions.Fraction(amount, current_amount)
+        self.recipes *= fr.Fraction(amount, current_amount)
 
-    def to_dict(self) -> dict[str, ty.Any]:
-        return {
-            "goal": self.goal.class_name,
-            "recipes": {
-                recipe.class_name: count for recipe, count in self.recipes.items()
-            },
-        }
+    def to_saveable(self, scale: fr.Fraction) -> _ProductionChainSavable:
+        """Convert to a saveable format. It is the caller's responsibility to ensure scale is correct."""
+        return _ProductionChainSavable(
+            goal_class_name=self.goal.class_name,
+            recipes={item.class_name: amount for item, amount in self.recipes.items()},
+            recipe_input_scale=scale,
+        )
 
     @classmethod
-    def from_dict(cls, in_dict: dict[str, ty.Any], game_data: ic.GameData) -> ty.Self:
+    def from_saveable(
+        cls,
+        saveable: _ProductionChainSavable,
+        game_data: ic.GameData,
+    ) -> ty.Self:
+        """Load from saved state. MUTATES game_data TO CORRECT SCALE"""
+        if saveable.save_file_version != 1:
+            raise ValueError(
+                f"Unsupported production chain save version: "
+                f"{saveable.save_file_version}"
+            )
+
+        if saveable.goal_class_name not in game_data.items_d:
+            raise ValueError(
+                f"Save file goal item not found in current game data: "
+                f"{saveable.goal_class_name}"
+            )
+        for recipe_class_name in saveable.recipes:
+            if recipe_class_name not in game_data.recipes_d:
+                raise ValueError(
+                    f"Save file recipe not found in current game data: "
+                    f"{recipe_class_name}"
+                )
+
+        # DO THIS BEFORE converting dictionaries, so that the recipes are correct.
+        game_data.scale_recipes(saveable.recipe_input_scale / game_data.scale)
+
         return cls(
-            goal=game_data.items_d[in_dict["goal"]],
+            goal=game_data.items_d[saveable.goal_class_name],
             recipes=sc.ScalableCounter({
                 game_data.recipes_d[recipe]: count
-                for recipe, count in in_dict["recipes"].items()
+                for recipe, count in saveable.recipes.items()
             }),
         )
 
-    def save(self, filename: pathlib.Path) -> None:
-        with open(filename, "w") as fout:
-            json.dump(self.to_dict(), fout, indent=2)
+    def save(self, filename: pathlib.Path, scale: fr.Fraction) -> None:
+        saveable = self.to_saveable(scale=scale)
+        filename.write_text(saveable.model_dump_json(indent=2))
 
     @classmethod
     def load(cls, filename: pathlib.Path, game_data: ic.GameData) -> ty.Self:
-        with open(filename) as fin:
-            return cls.from_dict(json.load(fin), game_data=game_data)
+        """Load from saved file. MUTATES game_data TO CORRECT SCALE"""
+        saveable = _ProductionChainSavable.model_validate_json(filename.read_text())
+        return cls.from_saveable(saveable, game_data)
+
+
+class _ProductionChainSavable(pydantic.BaseModel):
+    model_config = pydantic.ConfigDict(extra="forbid")
+
+    goal_class_name: str
+    recipes: dict[str, fr.Fraction]
+    recipe_input_scale: fr.Fraction
+    save_file_version: int = 1
