@@ -52,7 +52,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.save_action.triggered.connect(self.save_chain)
         self.save_as_action.triggered.connect(self.save_chain_as)
         self.exit_action.triggered.connect(self.close)
-        self.add_goal_recipe_action.triggered.connect(self.add_goal_recipe)
+        self.add_goal_recipe_action.triggered.connect(self.add_goal_recipe_from_ui)
         self.add_shortage_recipe_action.triggered.connect(self.add_shortage_recipe)
 
         file_menu = self.menuBar().addMenu("File")
@@ -96,7 +96,7 @@ class MainWindow(QtWidgets.QMainWindow):
         action_layout = QtWidgets.QHBoxLayout()
         self.add_goal_recipe_button = QtWidgets.QPushButton("Add Goal Recipe...")
         self.add_shortage_recipe_button = QtWidgets.QPushButton("Add Shortage Recipe...")
-        self.add_goal_recipe_button.clicked.connect(self.add_goal_recipe)
+        self.add_goal_recipe_button.clicked.connect(self.add_goal_recipe_from_ui)
         self.add_shortage_recipe_button.clicked.connect(self.add_shortage_recipe)
         action_layout.addWidget(self.add_goal_recipe_button)
         action_layout.addWidget(self.add_shortage_recipe_button)
@@ -132,16 +132,23 @@ class MainWindow(QtWidgets.QMainWindow):
         if self.production_chain is not None:
             return
 
-        goal = dialogs.choose_goal_item(game_data=self.game_data, parent=self)
-        if goal is None:
-            self.close()
-            return
+        while self.production_chain is None:
+            choice = dialogs.choose_initial_goal_item(
+                game_data=self.game_data,
+                parent=self,
+            )
+            if choice is None:
+                self.close()
+                return
+            if choice is dialogs.GoalDialogAction.LOAD_FILE:
+                if self.open_chain():
+                    return
+                continue
 
-        self.production_chain = pc.ProductionChain(goal=goal)
-        self.filename = None
-        self.refresh()
-        self.add_goal_recipe()
-        self.add_goal_recipe()
+            self.production_chain = pc.ProductionChain(goal=choice.item)
+            self.filename = None
+            self.refresh()
+            self.add_goal_recipe(amount_per_min=choice.amount_per_min)
 
     def new_chain(self) -> None:
         goal = dialogs.choose_goal_item(game_data=self.game_data, parent=self)
@@ -151,8 +158,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.production_chain = pc.ProductionChain(goal=goal)
         self.filename = None
         self.refresh()
+        self.add_goal_recipe()
 
-    def add_goal_recipe(self) -> None:
+    def add_goal_recipe(self, amount_per_min: fr.Fraction | None = None) -> None:
         if self.production_chain is None:
             self.prompt_for_goal_if_needed()
             if self.production_chain is None:
@@ -168,16 +176,21 @@ class MainWindow(QtWidgets.QMainWindow):
         if recipe is None:
             return
 
-        amount = dialogs.get_positive_fraction(
-            title="Goal Output Rate",
-            label=f"How many {chain.goal.name} per minute with this recipe?",
-            parent=self,
-        )
+        amount = amount_per_min
         if amount is None:
-            return
+            amount = dialogs.get_positive_fraction(
+                title="Goal Output Rate",
+                label=f"How many {chain.goal.name} per minute with this recipe?",
+                parent=self,
+            )
+            if amount is None:
+                return
 
         chain.recipes[recipe] = amount / recipe.products_per_min[chain.goal]
         self.refresh()
+
+    def add_goal_recipe_from_ui(self) -> None:
+        self.add_goal_recipe()
 
     def add_shortage_recipe(self) -> None:
         if self.production_chain is None:
@@ -226,7 +239,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.refresh()
 
-    def open_chain(self) -> None:
+    def open_chain(self) -> bool:
         filename_str, _selected_filter = QtWidgets.QFileDialog.getOpenFileName(
             self,
             "Open Production Chain",
@@ -234,17 +247,18 @@ class MainWindow(QtWidgets.QMainWindow):
             "Production Chain (*.json);;All Files (*)",
         )
         if not filename_str:
-            return
+            return False
 
         filename = pathlib.Path(filename_str)
         try:
             self.production_chain = pc.ProductionChain.load(filename, self.game_data)
         except Exception as exc:
             QtWidgets.QMessageBox.critical(self, "Open Failed", str(exc))
-            return
+            return False
 
         self.filename = filename
         self.refresh()
+        return True
 
     def save_chain(self) -> None:
         if self.production_chain is None:
