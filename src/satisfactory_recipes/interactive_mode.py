@@ -8,8 +8,8 @@ import sys
 import traceback
 import typing as ty
 
-from . import info_classes as ic
-from . import production_chain as pc
+from satisfactory_recipes import info_classes as ic
+from satisfactory_recipes import production_chain as pc
 
 MAX_DISPLAY_OPTIONS = 10
 QUIT_COMMANDS = ("exit", "quit")
