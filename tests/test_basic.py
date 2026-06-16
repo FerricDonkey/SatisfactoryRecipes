@@ -90,101 +90,153 @@ def test_production_chain_no_crash() -> None:
     production_chain.print()
 
 
-def test_recipe_scaling() -> None:
-    """Ensure recipe scaling works."""
-    fake_solid1 = ic.Item(
-        class_name="solid1",
-        name="solid1",
-        matter_state=ic.MatterState.SOLID,
-        stack_size=1,
-        resource_sink_points=1,
-        is_resource=True,
-    )
-    fake_solid2 = ic.Item(
-        class_name="solid2",
-        name="solid2",
-        matter_state=ic.MatterState.SOLID,
-        stack_size=1,
-        resource_sink_points=1,
-        is_resource=True,
-    )
-    fake_gas1 = ic.Item(
-        class_name="gas1",
-        name="gas1",
-        matter_state=ic.MatterState.GAS,
-        stack_size=1,
-        resource_sink_points=1,
-        is_resource=True,
-    )
-    fake_gas2 = ic.Item(
-        class_name="gas2",
-        name="gas2",
-        matter_state=ic.MatterState.GAS,
-        stack_size=1,
-        resource_sink_points=1,
-        is_resource=True,
-    )
-    fake_liquid1 = ic.Item(
-        class_name="liquid1",
-        name="liquid1",
-        matter_state=ic.MatterState.LIQUID,
-        stack_size=1,
-        resource_sink_points=1,
-        is_resource=True,
-    )
-    fake_liquid2 = ic.Item(
-        class_name="liquid2",
-        name="liquid2",
-        matter_state=ic.MatterState.LIQUID,
+def make_fake_item(
+    name: str,
+    matter_state: ic.MatterState,
+) -> ic.Item:
+    return ic.Item(
+        class_name=name,
+        name=name,
+        matter_state=matter_state,
         stack_size=1,
         resource_sink_points=1,
         is_resource=True,
     )
 
-    fake_recipe = ic.Recipe(
+
+def make_fake_recipe(
+    *,
+    inputs: dict[ic.Item, fr.Fraction],
+    products: dict[ic.Item, fr.Fraction] | None = None,
+    craft_time: fr.Fraction = fr.Fraction(60),
+) -> ic.Recipe:
+    if products is None:
+        products = {}
+
+    return ic.Recipe(
         class_name="fake",
         name="fake",
-        inputs=sc.ScalableCounter[ic.Item]({
-            fake_solid1: fr.Fraction(1, 1),
-            fake_solid2: fr.Fraction(4, 1),
-            fake_gas1: fr.Fraction(1, 1000),
-            fake_gas2: fr.Fraction(4, 1000),
-            fake_liquid1: fr.Fraction(1, 1000),
-            fake_liquid2: fr.Fraction(4, 1000),
-        }),
-        inputs_per_min=sc.ScalableCounter[ic.Item]({
-            fake_solid1: fr.Fraction(1, 1),
-            fake_solid2: fr.Fraction(4, 1),
-            fake_gas1: fr.Fraction(1, 1000),
-            fake_gas2: fr.Fraction(4, 1000),
-            fake_liquid1: fr.Fraction(1, 1000),
-            fake_liquid2: fr.Fraction(4, 1000),
-        }),
-        products=sc.ScalableCounter[ic.Item]({
-            fake_solid1: fr.Fraction(1, 1),
-            fake_solid2: fr.Fraction(4, 1),
-            fake_gas1: fr.Fraction(1, 1000),
-            fake_gas2: fr.Fraction(4, 1000),
-            fake_liquid1: fr.Fraction(1, 1000),
-            fake_liquid2: fr.Fraction(4, 1000),
-        }),
-        products_per_min=sc.ScalableCounter[ic.Item]({
-            fake_solid1: fr.Fraction(1, 1),
-            fake_solid2: fr.Fraction(4, 1),
-            fake_gas1: fr.Fraction(1, 1000),
-            fake_gas2: fr.Fraction(4, 1000),
-            fake_liquid1: fr.Fraction(1, 1000),
-            fake_liquid2: fr.Fraction(4, 1000),
-        }),
+        inputs=sc.ScalableCounter[ic.Item](inputs, frozen=True),
+        inputs_per_min=sc.ScalableCounter[ic.Item](
+            {
+                item: amount * fr.Fraction(60) / craft_time
+                for item, amount in inputs.items()
+            },
+            frozen=True,
+        ),
+        products=sc.ScalableCounter[ic.Item](products, frozen=True),
+        products_per_min=sc.ScalableCounter[ic.Item](
+            {
+                item: amount * fr.Fraction(60) / craft_time
+                for item, amount in products.items()
+            },
+            frozen=True,
+        ),
         produced_in=None,
-        craft_time=fr.Fraction(1, 1),
-        _variable_part_mean_power_draw=fr.Fraction(1, 1),
+        craft_time=craft_time,
+        _variable_part_mean_power_draw=fr.Fraction(0),
     )
 
-    quarter_scale = fake_recipe.create_scaled(fr.Fraction(1, 4))
-    for counter in (quarter_scale.inputs_per_min, quarter_scale.inputs):
-        for item, amount in counter.items():
-            if item.is_fluid:
-                assert amount == fr.Fraction(1, 1000)
-            else:
-                assert amount == fr.Fraction(1, 1)
+
+@pytest.mark.parametrize(
+    ("amount", "factor", "is_fluid", "expected"),
+    [
+        # Solids at 0.25x:
+        # 1 -> 0.25 -> min 1
+        (fr.Fraction(1), fr.Fraction(1, 4), False, fr.Fraction(1)),
+        # 2 -> 0.5 -> round half up to 1
+        (fr.Fraction(2), fr.Fraction(1, 4), False, fr.Fraction(1)),
+        # 3 -> 0.75 -> round to 1
+        (fr.Fraction(3), fr.Fraction(1, 4), False, fr.Fraction(1)),
+        # 4 -> 1
+        (fr.Fraction(4), fr.Fraction(1, 4), False, fr.Fraction(1)),
+        # 5 -> 1.25 -> round to 1
+        (fr.Fraction(5), fr.Fraction(1, 4), False, fr.Fraction(1)),
+        # 6 -> 1.5 -> round half up to 2
+        (fr.Fraction(6), fr.Fraction(1, 4), False, fr.Fraction(2)),
+        # Fluids/gases round in raw units, where 1 displayed unit == 1000 raw.
+        # 0.001 -> 1 raw unit; cannot go below 1 raw unit.
+        (fr.Fraction(1, 1000), fr.Fraction(1, 4), True, fr.Fraction(1, 1000)),
+        # 0.002 -> 2 raw; 2 * 1/4 = 0.5 -> 1 raw.
+        (fr.Fraction(2, 1000), fr.Fraction(1, 4), True, fr.Fraction(1, 1000)),
+        # 0.006 -> 6 raw; 6 * 1/4 = 1.5 -> 2 raw.
+        (fr.Fraction(6, 1000), fr.Fraction(1, 4), True, fr.Fraction(2, 1000)),
+        # 30 m³ -> 30000 raw; quarter is 7500 raw -> 7.5 m³.
+        (fr.Fraction(30), fr.Fraction(1, 4), True, fr.Fraction(15, 2)),
+    ],
+)
+def test_scale_one_input_edge_cases(
+    amount: fr.Fraction,
+    factor: fr.Fraction,
+    is_fluid: bool,
+    expected: fr.Fraction,
+) -> None:
+    assert ic.Recipe.scale_one_input(amount, factor, is_fluid) == expected
+
+
+def test_recipe_scaling_scales_inputs_and_recomputes_inputs_per_min() -> None:
+    solid_1 = make_fake_item("solid_1", ic.MatterState.SOLID)
+    solid_6 = make_fake_item("solid_6", ic.MatterState.SOLID)
+    liquid_30 = make_fake_item("liquid_30", ic.MatterState.LIQUID)
+    gas_006 = make_fake_item("gas_006", ic.MatterState.GAS)
+
+    recipe = make_fake_recipe(
+        inputs={
+            solid_1: fr.Fraction(1),
+            solid_6: fr.Fraction(6),
+            liquid_30: fr.Fraction(30),
+            gas_006: fr.Fraction(6, 1000),
+        },
+        craft_time=fr.Fraction(30),
+    )
+
+    scaled = recipe.create_scaled(fr.Fraction(1, 4))
+
+    assert scaled.inputs[solid_1] == fr.Fraction(1)
+    assert scaled.inputs[solid_6] == fr.Fraction(2)
+    assert scaled.inputs[liquid_30] == fr.Fraction(15, 2)
+    assert scaled.inputs[gas_006] == fr.Fraction(2, 1000)
+
+    # craft_time is 30 seconds, so each machine does 2 cycles/min.
+    assert scaled.inputs_per_min[solid_1] == fr.Fraction(2)
+    assert scaled.inputs_per_min[solid_6] == fr.Fraction(4)
+    assert scaled.inputs_per_min[liquid_30] == fr.Fraction(15)
+    assert scaled.inputs_per_min[gas_006] == fr.Fraction(4, 1000)
+
+    hash(scaled)
+
+
+def test_recipe_scaling_does_not_scale_products() -> None:
+    input_item = make_fake_item("input_item", ic.MatterState.SOLID)
+    product_item = make_fake_item("product_item", ic.MatterState.SOLID)
+
+    recipe = make_fake_recipe(
+        inputs={input_item: fr.Fraction(8)},
+        products={product_item: fr.Fraction(3)},
+        craft_time=fr.Fraction(15),
+    )
+
+    scaled = recipe.create_scaled(fr.Fraction(1, 4))
+
+    assert scaled.inputs[input_item] == fr.Fraction(2)
+    assert scaled.inputs_per_min[input_item] == fr.Fraction(8)
+
+    # Products should be unchanged by recipe input scaling.
+    assert scaled.products[product_item] == fr.Fraction(3)
+    assert scaled.products_per_min[product_item] == fr.Fraction(12)
+
+
+def test_recipe_scaling_freezes_new_input_counters() -> None:
+    item = make_fake_item("item", ic.MatterState.SOLID)
+    recipe = make_fake_recipe(inputs={item: fr.Fraction(8)})
+
+    scaled = recipe.create_scaled(fr.Fraction(1, 4))
+
+    assert scaled.inputs.frozen
+    assert scaled.inputs_per_min.frozen
+
+    with pytest.raises(TypeError):
+        scaled.inputs[item] = fr.Fraction(999)
+
+    with pytest.raises(TypeError):
+        scaled.inputs_per_min[item] = fr.Fraction(999)

@@ -84,7 +84,7 @@ def get_positive_float(prompt: str) -> fr.Fraction:
             return value
 
 
-def _cancelable_decorator[**P](func: ty.Callable[P, None]) -> ty.Callable[P, None]:
+def _cancelable[**P](func: ty.Callable[P, None]) -> ty.Callable[P, None]:
     """
     Decorator to capture CancelException and return None if it is raised.
 
@@ -207,7 +207,7 @@ class InteractiveRunner:
     game_data: ic.GameData
     production_chain: pc.ProductionChain
 
-    @_cancelable_decorator
+    @_cancelable
     def add_recipe_for_shortage_item(self) -> None:
         items = self.production_chain.get_shortage_items()
         if not items:
@@ -231,7 +231,7 @@ class InteractiveRunner:
         print("New Recipe:")
         recipe.print(indent=4, scale=self.production_chain.recipes[recipe])
 
-    @_cancelable_decorator
+    @_cancelable
     def add_goal_recipe(self) -> None:
         recipes = self.game_data.get_recipes_producing(self.production_chain.goal)
         recipes.sort(key=lambda r: (r.name.startswith("Alternate"), r.name.lower()))
@@ -250,7 +250,7 @@ class InteractiveRunner:
         print("New Recipe:")
         recipe.print(indent=4, scale=self.production_chain.recipes[recipe])
 
-    @_cancelable_decorator
+    @_cancelable
     def scale_item(self) -> None:
         if not self.production_chain.recipes:
             print("Cannot scale before adding recipes")
@@ -268,11 +268,11 @@ class InteractiveRunner:
         )
         self.production_chain.scale_item(item, amount)
 
-    @_cancelable_decorator
+    @_cancelable
     def clear_recipes(self) -> None:
         self.production_chain.recipes.clear()
 
-    @_cancelable_decorator
+    @_cancelable
     def remove_recipe(self) -> None:
         recipe = choose_named(
             sorted(
@@ -286,7 +286,7 @@ class InteractiveRunner:
         print("\n")
         self.production_chain.print()
 
-    @_cancelable_decorator
+    @_cancelable
     def save(self) -> None:
         path = get_path_no_exists("Enter path to save data")
         try:
@@ -296,7 +296,7 @@ class InteractiveRunner:
             traceback.print_exc()
             print(f"\nCould not save to {path}. See above traceback for details")
 
-    @_cancelable_decorator
+    @_cancelable
     def load(self) -> None:
         path = get_path_exists("Enter path to load data")
         try:
@@ -325,11 +325,14 @@ class InteractiveRunner:
 
     @classmethod
     def from_goal_prompt(cls, game_data: ic.GameData) -> ty.Self:
-        goal = get_arbitrary_item(
-            game_data=game_data,
-            must_be_producible=True,
-            prompt="Choose Item to Produce",
-        )
+        try:
+            goal = get_arbitrary_item(
+                game_data=game_data,
+                must_be_producible=True,
+                prompt="Choose Item to Produce",
+            )
+        except _CancelException as exc:
+            raise _WeDoneException("We done") from exc
         return cls.from_starting_item(
             game_data=game_data,
             item=goal,
@@ -388,6 +391,14 @@ def make_parser() -> argparse.ArgumentParser:
         dest="filename",
         help="- Existing file to load, if any",
         default=None,
+        type=pathlib.Path,
+    )
+    parser.add_argument(
+        "--scale",
+        dest="scale",
+        help="- Input recipe scale.",
+        default=fr.Fraction(1, 1),
+        type=fr.Fraction,
     )
 
     return parser
@@ -401,6 +412,8 @@ def main(argv: ty.Sequence[str] | None = None):
     args = parser.parse_args(argv)
 
     game_data = ic.GameData.from_json(ic.DOCS_PATH)
+    if args.scale != 1:
+        game_data.scale_recipes(args.scale)
     try:
         if args.filename is None:
             runner = InteractiveRunner.from_goal_prompt(game_data)

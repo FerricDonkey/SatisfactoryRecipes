@@ -240,14 +240,20 @@ class Recipe(_BaseInfo):
 
     def create_scaled(self, factor: fr.Fraction) -> ty.Self:
         """Return a new recipes, scaling inputs by factor, handling rounding as done in 1.2."""
-        new_inputs = sc.ScalableCounter[Item]({
-            item: self.scale_one_input(amount, factor, item.is_fluid)
-            for item, amount in self.inputs.items()
-        })
-        new_inputs_per_min = sc.ScalableCounter[Item]({
-            item: self.scale_one_input(amount, factor, item.is_fluid)
-            for item, amount in self.inputs_per_min.items()
-        })
+        new_inputs = sc.ScalableCounter[Item](
+            {
+                item: self.scale_one_input(amount, factor, item.is_fluid)
+                for item, amount in self.inputs.items()
+            },
+            frozen=True,
+        )
+        new_inputs_per_min = sc.ScalableCounter[Item](
+            {
+                item: amount / fr.Fraction(self.craft_time, 60)
+                for item, amount in new_inputs.items()
+            },
+            frozen=True,
+        )
 
         return copy.replace(
             self,

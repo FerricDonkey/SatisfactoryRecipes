@@ -1,7 +1,7 @@
 .idea
 **/.pyc
 **/__pycache__
-src/*.json
+*.json
 .vscode
 .venv
 .mypy_cache
