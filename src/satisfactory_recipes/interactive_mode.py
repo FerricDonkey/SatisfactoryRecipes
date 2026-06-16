@@ -21,7 +21,7 @@ class _SupportsName(ty.Protocol):
     def name(self) -> str: ...
 
 
-class _WeDoneException(Exception):
+class ExitInteractiveException(Exception):
     """
     Raised to end interaction session from anywhere via exceptional_input.
 
@@ -29,7 +29,7 @@ class _WeDoneException(Exception):
     """
 
 
-class _CancelException(Exception):
+class CancelException(Exception):
     """
     Raised to cancel particular function calls via exceptional_input.
 
@@ -45,10 +45,10 @@ def exceptional_input(
 ) -> str:
     value = input(prompt)
     if value in QUIT_COMMANDS:
-        raise _WeDoneException()
+        raise ExitInteractiveException()
     if value in CANCEL_COMMANDS:
         if can_cancel:
-            raise _CancelException()
+            raise CancelException()
         else:
             print("Cannot Cancel.")
             return exceptional_input(prompt, can_cancel=can_cancel)
@@ -95,7 +95,7 @@ def _cancelable[**P](func: ty.Callable[P, None]) -> ty.Callable[P, None]:
     def wrapped(*args: P.args, **kwargs: P.kwargs) -> None:
         try:
             return func(*args, **kwargs)
-        except _CancelException:
+        except CancelException:
             return None
 
     return wrapped
@@ -331,8 +331,8 @@ class InteractiveRunner:
                 must_be_producible=True,
                 prompt="Choose Item to Produce",
             )
-        except _CancelException as exc:
-            raise _WeDoneException("We done") from exc
+        except CancelException as exc:
+            raise ExitInteractiveException("We done") from exc
         return cls.from_starting_item(
             game_data=game_data,
             item=goal,
@@ -368,7 +368,7 @@ class InteractiveRunner:
                     print(f"Invalid command {command_str}")
                 else:
                     command(self)
-        except _WeDoneException:
+        except ExitInteractiveException:
             pass
 
     _DISPATCH_TABLE: ty.ClassVar[dict[str, ty.Callable[[InteractiveRunner], None]]] = {
@@ -423,7 +423,7 @@ def main(argv: ty.Sequence[str] | None = None):
                 game_data=game_data,
             )
         runner.mainloop()
-    except _WeDoneException:
+    except ExitInteractiveException:
         pass
 
 

@@ -551,10 +551,13 @@ def test_interactive_save_passes_current_game_data_scale(
 
     save_path = tmp_path / "chain.json"
 
+    def fake_get_path_no_exists(prompt: str) -> pathlib.Path:
+        return save_path
+
     monkeypatch.setattr(
         im,
         "get_path_no_exists",
-        lambda prompt: save_path,
+        fake_get_path_no_exists,
     )
 
     calls: list[tuple[pc.ProductionChain, pathlib.Path, fr.Fraction]] = []
@@ -585,10 +588,13 @@ def test_interactive_save_cancel_does_not_save(
         production_chain=production_chain,
     )
 
+    def fake_get_path_no_exists(prompt: str) -> pathlib.Path:
+        raise im.CancelException()
+
     monkeypatch.setattr(
         im,
         "get_path_no_exists",
-        lambda prompt: (_ for _ in ()).throw(im._CancelException()),
+        fake_get_path_no_exists,
     )
 
     called = False
