@@ -11,7 +11,6 @@ import json
 import pathlib
 import sys
 import typing as ty
-from functools import cached_property
 
 from satisfactory_recipes import stupid_classes as sc
 
@@ -98,11 +97,11 @@ class Item(_BaseInfo):
 
     @property
     def is_liquid(self) -> bool:
-        return self.matter_state == "liquid"
+        return self.matter_state == MatterState.LIQUID
 
     @property
     def is_gas(self) -> bool:
-        return self.matter_state == "gas"
+        return self.matter_state == MatterState.GAS
 
     @property
     def is_fluid(self) -> bool:
@@ -475,7 +474,7 @@ class GameData:
             recipes_d=recipes_d,
         )
 
-    @cached_property
+    @property
     def producible_items(self) -> frozenset[Item]:
         return frozenset(
             item
@@ -484,13 +483,13 @@ class GameData:
             if recipe.produced_in
         )
 
-    @cached_property
+    @property
     def item_name_d(self) -> dict[str, Item]:
         item_name_d = {item.name: item for item in self.items_d.values()}
         assert len(item_name_d) == len(self.items_d)
         return item_name_d
 
-    @cached_property
+    @property
     def producible_item_name_d(self) -> dict[str, Item]:
         return {
             name: item

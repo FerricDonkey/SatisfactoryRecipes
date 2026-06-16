@@ -4,7 +4,6 @@ Actual production chain logic
 
 import dataclasses
 import fractions as fr
-import math
 import pathlib
 import sys
 import typing as ty
@@ -72,9 +71,7 @@ class ProductionChain:
 
     def get_involved_items(self) -> set[ic.Item]:
         return set(
-            item
-            for item, amount in self.get_net_per_min().items()
-            if not math.isclose(amount, 0)
+            item for item, amount in self.get_net_per_min().items() if amount != 0
         )
 
     def get_net_per_min(self) -> sc.ScalableCounter[ic.Item]:
@@ -162,6 +159,9 @@ class ProductionChain:
 
         net = self.get_net_per_min()
         current_amount = abs(net[item])
+        if current_amount == 0:
+            raise ValueError(f"Cannot scale {item.name}; current amount is 0")
+
         amount = abs(amount)
         self.recipes *= fr.Fraction(amount, current_amount)
 

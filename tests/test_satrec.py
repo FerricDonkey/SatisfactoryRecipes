@@ -606,3 +606,28 @@ def test_interactive_save_cancel_does_not_save(
     runner.save()
 
     assert not called
+
+
+def test_scale_item_rejects_item_not_in_chain() -> None:
+    item = make_fake_item("Desc_Item_C")
+    other = make_fake_item("Desc_Other_C")
+
+    chain = pc.ProductionChain(goal=item)
+
+    with pytest.raises(ValueError, match="current amount is 0"):
+        chain.scale_item(other, fr.Fraction(10))
+
+
+def test_scale_item_rejects_zero_current_amount(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    item = make_fake_item("Desc_Item_C")
+    chain = pc.ProductionChain(goal=item)
+
+    def fake_get_net_per_min(self: pc.ProductionChain) -> sc.ScalableCounter[ic.Item]:
+        return sc.ScalableCounter[ic.Item]({item: fr.Fraction(0)})
+
+    monkeypatch.setattr(pc.ProductionChain, "get_net_per_min", fake_get_net_per_min)
+
+    with pytest.raises(ValueError, match="current amount is 0"):
+        chain.scale_item(item, fr.Fraction(10))
