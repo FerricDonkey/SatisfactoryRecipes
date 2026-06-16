@@ -44,6 +44,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.has_unsaved_changes = False
         self._default_palette = QtWidgets.QApplication.palette()
         self._default_style_name = QtWidgets.QApplication.style().objectName()
+        self._default_font = QtWidgets.QApplication.font()
+        self._zoom_steps = 0
 
         self.setWindowTitle("Satisfactory Recipes")
         self.resize(1100, 760)
@@ -72,11 +74,22 @@ class MainWindow(QtWidgets.QMainWindow):
         self.exit_action = QtGui.QAction("Exit", self)
         self.add_goal_recipe_action = QtGui.QAction("Add Goal Recipe...", self)
         self.add_shortage_recipe_action = QtGui.QAction("Add Shortage Recipe...", self)
+        self.zoom_in_action = QtGui.QAction("Zoom In", self)
+        self.zoom_out_action = QtGui.QAction("Zoom Out", self)
+        self.reset_zoom_action = QtGui.QAction("Reset Zoom", self)
 
         self.open_action.setShortcut(QtGui.QKeySequence.StandardKey.Open)
         self.save_action.setShortcut(QtGui.QKeySequence.StandardKey.Save)
         self.save_as_action.setShortcut(QtGui.QKeySequence.StandardKey.SaveAs)
         self.new_action.setShortcut(QtGui.QKeySequence.StandardKey.New)
+        self.zoom_in_action.setShortcuts(
+            [
+                QtGui.QKeySequence(QtGui.QKeySequence.StandardKey.ZoomIn),
+                QtGui.QKeySequence("Ctrl+="),
+            ]
+        )
+        self.zoom_out_action.setShortcut(QtGui.QKeySequence.StandardKey.ZoomOut)
+        self.reset_zoom_action.setShortcut(QtGui.QKeySequence("Ctrl+0"))
 
         self.new_action.triggered.connect(self.new_chain)
         self.open_action.triggered.connect(self.open_chain)
@@ -85,6 +98,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.exit_action.triggered.connect(self.close)
         self.add_goal_recipe_action.triggered.connect(self.add_goal_recipe_from_ui)
         self.add_shortage_recipe_action.triggered.connect(self.add_shortage_recipe_from_ui)
+        self.zoom_in_action.triggered.connect(self.zoom_in)
+        self.zoom_out_action.triggered.connect(self.zoom_out)
+        self.reset_zoom_action.triggered.connect(self.reset_zoom)
 
         file_menu = self.menuBar().addMenu("File")
         file_menu.addAction(self.new_action)
@@ -98,6 +114,11 @@ class MainWindow(QtWidgets.QMainWindow):
         recipe_menu = self.menuBar().addMenu("Recipes")
         recipe_menu.addAction(self.add_goal_recipe_action)
         recipe_menu.addAction(self.add_shortage_recipe_action)
+
+        view_menu = self.menuBar().addMenu("View")
+        view_menu.addAction(self.zoom_in_action)
+        view_menu.addAction(self.zoom_out_action)
+        view_menu.addAction(self.reset_zoom_action)
 
     def _setup_theme_actions(self) -> None:
         options_menu = self.menuBar().addMenu("Options")
@@ -146,11 +167,14 @@ class MainWindow(QtWidgets.QMainWindow):
         layout.addLayout(header_layout)
 
         splitter = QtWidgets.QSplitter()
+        splitter.setOpaqueResize(True)
+        splitter.setChildrenCollapsible(False)
         splitter.addWidget(self._make_recipes_panel())
         splitter.addWidget(self._make_net_panel())
         splitter.setStretchFactor(0, 3)
         splitter.setStretchFactor(1, 2)
-        layout.addWidget(splitter)
+        splitter.setSizes([660, 440])
+        layout.addWidget(splitter, stretch=1)
 
         self.status_label.setObjectName("statusLabel")
         layout.addWidget(self.status_label)
@@ -179,7 +203,21 @@ class MainWindow(QtWidgets.QMainWindow):
         self.recipes_table.setEditTriggers(
             QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers
         )
-        self.recipes_table.horizontalHeader().setStretchLastSection(True)
+        self.recipes_table.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding,
+            QtWidgets.QSizePolicy.Policy.Expanding,
+        )
+        recipe_header = self.recipes_table.horizontalHeader()
+        recipe_header.setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeMode.Stretch)
+        recipe_header.setSectionResizeMode(
+            1,
+            QtWidgets.QHeaderView.ResizeMode.ResizeToContents,
+        )
+        recipe_header.setSectionResizeMode(2, QtWidgets.QHeaderView.ResizeMode.Stretch)
+        recipe_header.setSectionResizeMode(
+            3,
+            QtWidgets.QHeaderView.ResizeMode.ResizeToContents,
+        )
         layout.addWidget(self.recipes_table)
 
         return panel
@@ -194,11 +232,24 @@ class MainWindow(QtWidgets.QMainWindow):
             table.setColumnCount(2)
             table.setHorizontalHeaderLabels(["Item", "Per Minute"])
             table.setEditTriggers(QtWidgets.QAbstractItemView.EditTrigger.DoubleClicked)
-            table.horizontalHeader().setStretchLastSection(True)
+            table.setSizePolicy(
+                QtWidgets.QSizePolicy.Policy.Expanding,
+                QtWidgets.QSizePolicy.Policy.Expanding,
+            )
+            header = table.horizontalHeader()
+            header.setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeMode.Stretch)
+            header.setSectionResizeMode(
+                1,
+                QtWidgets.QHeaderView.ResizeMode.ResizeToContents,
+            )
             table.itemChanged.connect(self._handle_net_amount_changed)
 
         self.inputs_table.itemDoubleClicked.connect(self._handle_input_double_clicked)
         self.recipe_details_edit.setReadOnly(True)
+        self.recipe_details_edit.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding,
+            QtWidgets.QSizePolicy.Policy.Expanding,
+        )
 
         return tabs
 
@@ -420,6 +471,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._fill_net_table(self.outputs_table, outputs)
         self._fill_recipe_details(chain)
         self._update_recipe_actions()
+        self._resize_table_rows()
 
     def _handle_input_double_clicked(self, table_item: QtWidgets.QTableWidgetItem) -> None:
         if table_item.column() != 0:
@@ -491,6 +543,33 @@ class MainWindow(QtWidgets.QMainWindow):
                 return
 
         self._set_recipe_scale(scale)
+
+    def zoom_in(self) -> None:
+        self._set_zoom_steps(self._zoom_steps + 1)
+
+    def zoom_out(self) -> None:
+        self._set_zoom_steps(self._zoom_steps - 1)
+
+    def reset_zoom(self) -> None:
+        self._set_zoom_steps(0)
+
+    def _set_zoom_steps(self, steps: int) -> None:
+        steps = max(-5, min(steps, 8))
+        if steps == self._zoom_steps:
+            return
+
+        self._zoom_steps = steps
+        font = QtGui.QFont(self._default_font)
+        base_size = self._default_font.pointSizeF()
+        if base_size <= 0:
+            base_size = 9
+        font.setPointSizeF(base_size * (1.1**self._zoom_steps))
+
+        app = QtWidgets.QApplication.instance()
+        if isinstance(app, QtWidgets.QApplication):
+            app.setFont(font)
+
+        self._resize_table_rows()
 
     def _handle_theme_action(self) -> None:
         action = self.sender()
@@ -798,7 +877,7 @@ class MainWindow(QtWidgets.QMainWindow):
             for col, value in enumerate(values):
                 self.recipes_table.setItem(row, col, QtWidgets.QTableWidgetItem(value))
 
-        self.recipes_table.resizeColumnsToContents()
+        self.recipes_table.resizeRowsToContents()
 
     def _fill_recipe_details(self, chain: pc.ProductionChain) -> None:
         details: list[str] = []
@@ -826,4 +905,8 @@ class MainWindow(QtWidgets.QMainWindow):
             table.setItem(row, 0, name_item)
             table.setItem(row, 1, amount_item)
 
-        table.resizeColumnsToContents()
+        table.resizeRowsToContents()
+
+    def _resize_table_rows(self) -> None:
+        for table in (self.recipes_table, self.inputs_table, self.outputs_table):
+            table.resizeRowsToContents()
