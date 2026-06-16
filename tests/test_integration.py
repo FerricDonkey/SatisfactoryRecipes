@@ -1,6 +1,9 @@
 import collections.abc as cabc
 import fractions as fr
 
+import pytest
+
+from satisfactory_recipes import config as sr_config
 from satisfactory_recipes import info_classes as ic
 from satisfactory_recipes import production_chain as pc
 
@@ -21,7 +24,11 @@ def choose_recipe(recipes: cabc.Collection[ic.Recipe], item: ic.Item) -> ic.Reci
 
 def test_production_chain_no_crash() -> None:
     """This is a bad test, because it doesn't make sure anything is correct."""
-    game_data = ic.GameData.from_json(ic.DOCS_PATH)
+    docs_path = sr_config.find_docs_path()
+    if docs_path is None:
+        pytest.skip("Satisfactory docs file not found")
+
+    game_data = ic.GameData.from_json(docs_path)
     # raise ValueError(f"{game_data.producible_item_name_d}")
     goal_item = game_data.producible_item_name_d["Plutonium Fuel Rod"]
     production_chain = pc.ProductionChain(goal=goal_item)

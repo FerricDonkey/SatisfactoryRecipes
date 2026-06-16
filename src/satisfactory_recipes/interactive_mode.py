@@ -1,10 +1,8 @@
-import argparse
 import collections.abc as cabc
 import dataclasses
 import fractions as fr
 import functools
 import pathlib
-import sys
 import traceback
 import typing as ty
 
@@ -383,49 +381,7 @@ class InteractiveRunner:
         "load": load,
     }
 
-
-def make_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Interactive production planner")
-    parser.add_argument(
-        "--infile",
-        dest="filename",
-        help="- Existing file to load, if any",
-        default=None,
-        type=pathlib.Path,
-    )
-    parser.add_argument(
-        "--scale",
-        dest="scale",
-        help="- Input recipe scale.",
-        default=fr.Fraction(1, 1),
-        type=fr.Fraction,
-    )
-
-    return parser
-
-
-def main(argv: ty.Sequence[str] | None = None):
-    if argv is None:
-        argv = sys.argv[1:]
-
-    parser = make_parser()
-    args = parser.parse_args(argv)
-
-    game_data = ic.GameData.from_json(ic.DOCS_PATH)
-    if args.scale != 1:
-        game_data.scale_recipes(args.scale)
-    try:
-        if args.filename is None:
-            runner = InteractiveRunner.from_goal_prompt(game_data)
-        else:
-            runner = InteractiveRunner.from_production_chain_file(
-                filename=args.filename,
-                game_data=game_data,
-            )
-        runner.mainloop()
-    except ExitInteractiveException:
-        pass
-
-
 if __name__ == "__main__":
-    main()
+    from satisfactory_recipes import main
+
+    main.main()

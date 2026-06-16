@@ -3,12 +3,17 @@ import fractions as fr
 import pytest
 
 from satisfactory_recipes import info_classes as ic
+from satisfactory_recipes import config as sr_config
 from tests import support
 
 
 def test_get_recipes_producing() -> None:
     """Make sure all recipes that say they produce something do."""
-    game_data = ic.GameData.from_json(ic.DOCS_PATH)
+    docs_path = sr_config.find_docs_path()
+    if docs_path is None:
+        pytest.skip("Satisfactory docs file not found")
+
+    game_data = ic.GameData.from_json(docs_path)
     for item in game_data.producible_items:
         for recipe in game_data.get_recipes_producing(item):
             assert item in recipe.products

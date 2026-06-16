@@ -14,11 +14,6 @@ import typing as ty
 
 from satisfactory_recipes import stupid_classes as sc
 
-DOCS_PATH = pathlib.Path(
-    "E:/SteamLibrary/steamapps/common/Satisfactory/CommunityResources/Docs/en-us.json"
-)
-
-
 @dataclasses.dataclass(frozen=True, kw_only=True, slots=True, order=True)
 class _BaseInfo(abc.ABC):
     class_name: str  # Used as key in dictionaries
