@@ -3,10 +3,12 @@
 import dataclasses
 import enum
 import fractions as fr
+import pathlib
 import typing as ty
 
 from PySide6 import QtCore, QtWidgets
 
+from satisfactory_recipes import config as sr_config
 from satisfactory_recipes import info_classes as ic
 from satisfactory_recipes import search
 from satisfactory_recipes.gui import recipe_format
@@ -26,6 +28,146 @@ class InitialGoalSelection:
 class RecipeSelection:
     recipe: ic.Recipe
     amount_per_min: fr.Fraction
+
+
+@dataclasses.dataclass(frozen=True, kw_only=True, slots=True)
+class DocsPathSelection:
+    docs_path: pathlib.Path
+    game_path: pathlib.Path | None = None
+
+
+class DocsPathDialog(QtWidgets.QDialog):
+    """Dialog for locating the Satisfactory docs file."""
+
+    def __init__(
+        self,
+        *,
+        message: str,
+        parent: QtWidgets.QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Find Satisfactory Game Data")
+        self.resize(640, 260)
+
+        self.selected_docs_path: pathlib.Path | None = None
+        self.selected_game_path: pathlib.Path | None = None
+
+        intro_label = QtWidgets.QLabel(
+            "Satisfactory Recipes needs the game docs file before it can load "
+            "items and recipes."
+        )
+        intro_label.setWordWrap(True)
+
+        detail_label = QtWidgets.QLabel(message)
+        detail_label.setWordWrap(True)
+
+        self.path_edit = QtWidgets.QLineEdit()
+        self.path_edit.setReadOnly(True)
+        self.path_edit.setPlaceholderText(
+            "CommunityResources/Docs/en-us.json has not been selected"
+        )
+
+        choose_docs_button = QtWidgets.QPushButton("Choose Docs File...")
+        choose_game_button = QtWidgets.QPushButton("Choose Game Folder...")
+        choose_docs_button.clicked.connect(self._choose_docs_file)
+        choose_game_button.clicked.connect(self._choose_game_folder)
+
+        buttons = QtWidgets.QDialogButtonBox(
+            QtWidgets.QDialogButtonBox.StandardButton.Ok
+            | QtWidgets.QDialogButtonBox.StandardButton.Cancel
+        )
+        self.ok_button = buttons.button(QtWidgets.QDialogButtonBox.StandardButton.Ok)
+        self.ok_button.setEnabled(False)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+
+        chooser_layout = QtWidgets.QHBoxLayout()
+        chooser_layout.addWidget(choose_docs_button)
+        chooser_layout.addWidget(choose_game_button)
+        chooser_layout.addStretch()
+
+        layout = QtWidgets.QVBoxLayout()
+        layout.addWidget(intro_label)
+        layout.addWidget(detail_label)
+        layout.addWidget(self.path_edit)
+        layout.addLayout(chooser_layout)
+        layout.addStretch()
+        layout.addWidget(buttons)
+        self.setLayout(layout)
+
+    def _choose_docs_file(self) -> None:
+        filename, _selected_filter = QtWidgets.QFileDialog.getOpenFileName(
+            self,
+            "Choose Satisfactory Docs File",
+            "",
+            "Satisfactory Docs (en-us.json);;JSON Files (*.json);;All Files (*)",
+        )
+        if not filename:
+            return
+
+        docs_path = pathlib.Path(filename)
+        if not sr_config.is_valid_docs_path(docs_path):
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Invalid Docs File",
+                "Choose the Satisfactory CommunityResources/Docs/en-us.json file.",
+            )
+            return
+
+        self._set_selection(docs_path=docs_path, game_path=None)
+
+    def _choose_game_folder(self) -> None:
+        dirname = QtWidgets.QFileDialog.getExistingDirectory(
+            self,
+            "Choose Satisfactory Install Folder",
+            "",
+        )
+        if not dirname:
+            return
+
+        game_path = pathlib.Path(dirname)
+        if not sr_config.is_valid_game_path(game_path):
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Invalid Game Folder",
+                "Choose the Satisfactory install folder containing "
+                "CommunityResources/Docs/en-us.json.",
+            )
+            return
+
+        self._set_selection(
+            docs_path=sr_config.docs_path_from_game_path(game_path),
+            game_path=game_path,
+        )
+
+    def _set_selection(
+        self,
+        *,
+        docs_path: pathlib.Path,
+        game_path: pathlib.Path | None,
+    ) -> None:
+        self.selected_docs_path = docs_path
+        self.selected_game_path = game_path
+        self.path_edit.setText(str(docs_path))
+        self.ok_button.setEnabled(True)
+
+
+def choose_docs_path(
+    *,
+    message: str,
+    parent: QtWidgets.QWidget | None = None,
+) -> DocsPathSelection | None:
+    dialog = DocsPathDialog(message=message, parent=parent)
+    result = dialog.exec()
+    if result != QtWidgets.QDialog.DialogCode.Accepted:
+        return None
+    if dialog.selected_docs_path is None:
+        return None
+
+    return DocsPathSelection(
+        docs_path=dialog.selected_docs_path,
+        game_path=dialog.selected_game_path,
+    )
 
 
 class ItemSearchDialog(QtWidgets.QDialog):

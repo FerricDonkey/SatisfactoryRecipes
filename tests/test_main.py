@@ -4,6 +4,7 @@ import pathlib
 
 import pytest
 
+from satisfactory_recipes.gui import app as gui_app
 from satisfactory_recipes import main
 
 
@@ -99,3 +100,49 @@ def test_dispatch_runs_gui(monkeypatch: pytest.MonkeyPatch) -> None:
     main.dispatch(args)
 
     assert calls == [args]
+
+
+def test_run_gui_defers_docs_resolution_to_gui_app(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    args = main.make_parser().parse_args(
+        [
+            "gui",
+            "--docs-path",
+            "en-us.json",
+            "--game-path",
+            "Satisfactory",
+            "--infile",
+            "chain.json",
+            "--scale",
+            "1/2",
+        ]
+    )
+    calls: list[tuple[pathlib.Path | None, pathlib.Path | None, pathlib.Path | None]] = []
+
+    def fake_gui_main(
+        *,
+        docs_path: pathlib.Path | None = None,
+        game_path: pathlib.Path | None = None,
+        filename: pathlib.Path | None = None,
+        initial_scale: fr.Fraction = fr.Fraction(1, 1),
+    ) -> int:
+        assert initial_scale == fr.Fraction(1, 2)
+        calls.append((docs_path, game_path, filename))
+        return 0
+
+    def fail_resolve_docs_path(_args: argparse.Namespace) -> pathlib.Path:
+        raise AssertionError("GUI docs resolution should happen inside gui.app")
+
+    monkeypatch.setattr(gui_app, "main", fake_gui_main)
+    monkeypatch.setattr(main, "resolve_docs_path", fail_resolve_docs_path)
+
+    main.run_gui(args)
+
+    assert calls == [
+        (
+            pathlib.Path("en-us.json"),
+            pathlib.Path("Satisfactory"),
+            pathlib.Path("chain.json"),
+        )
+    ]

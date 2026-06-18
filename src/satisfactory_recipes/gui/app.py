@@ -9,12 +9,59 @@ from PySide6 import QtCore, QtWidgets
 from satisfactory_recipes import config as sr_config
 from satisfactory_recipes import info_classes as ic
 from satisfactory_recipes import production_chain as pc
+from satisfactory_recipes.gui import dialogs
 from satisfactory_recipes.gui import main_window
+
+
+def _resolve_docs_path_for_gui(
+    *,
+    docs_path: pathlib.Path | None,
+    game_path: pathlib.Path | None,
+    user_config: sr_config.Configuration,
+) -> tuple[pathlib.Path, sr_config.Configuration] | None:
+    warnings: list[str] = []
+    user_config, changed = sr_config.discard_invalid_paths(
+        user_config,
+        warn=warnings.append,
+    )
+
+    if docs_path is not None:
+        user_config.docs_path = docs_path
+    if game_path is not None:
+        user_config.game_path = game_path
+
+    try:
+        resolved_docs_path = sr_config.resolve_docs_path(
+            configuration=user_config,
+            warn=warnings.append,
+        )
+    except sr_config.DocsPathNotFoundError as exc:
+        message = str(exc)
+        if warnings:
+            message = "\n\n".join([*warnings, message])
+
+        selection = dialogs.choose_docs_path(message=message)
+        if selection is None:
+            return None
+
+        user_config.docs_path = selection.docs_path
+        user_config.game_path = selection.game_path
+        sr_config.save_config(user_config)
+        return selection.docs_path, user_config
+
+    user_config.docs_path = resolved_docs_path
+    if game_path is not None:
+        user_config.game_path = game_path
+    if changed or docs_path is not None or game_path is not None:
+        sr_config.save_config(user_config)
+
+    return resolved_docs_path, user_config
 
 
 def main(
     *,
-    docs_path: pathlib.Path,
+    docs_path: pathlib.Path | None = None,
+    game_path: pathlib.Path | None = None,
     filename: pathlib.Path | None = None,
     initial_scale: fr.Fraction = fr.Fraction(1, 1),
 ) -> int:
@@ -24,6 +71,15 @@ def main(
         app = QtWidgets.QApplication(sys.argv[:1])
 
     user_config = sr_config.load_config()
+    docs_resolution = _resolve_docs_path_for_gui(
+        docs_path=docs_path,
+        game_path=game_path,
+        user_config=user_config,
+    )
+    if docs_resolution is None:
+        return 1
+
+    docs_path, user_config = docs_resolution
     game_data = ic.GameData.from_json(docs_path)
     production_chain = None
     if filename is not None:

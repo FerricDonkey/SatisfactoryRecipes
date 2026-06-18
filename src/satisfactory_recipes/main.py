@@ -142,13 +142,13 @@ def run_cli(args: argparse.Namespace) -> None:
 
 
 def run_gui(args: argparse.Namespace) -> None:
-    docs_path = resolve_docs_path(args)
     scale = getattr(args, "scale", fr.Fraction(1, 1))
 
     from satisfactory_recipes.gui import app as gui_app
 
     gui_app.main(
-        docs_path=docs_path,
+        docs_path=getattr(args, "docs_path", None),
+        game_path=getattr(args, "game_path", None),
         filename=getattr(args, "filename", None),
         initial_scale=scale,
     )

@@ -1,5 +1,6 @@
 """Main GUI window."""
 
+import functools
 import fractions as fr
 import pathlib
 import typing as ty
@@ -10,7 +11,6 @@ from satisfactory_recipes import config as sr_config
 from satisfactory_recipes import info_classes as ic
 from satisfactory_recipes import production_chain as pc
 from satisfactory_recipes.gui import dialogs, recipe_format
-
 
 type ThemeName = ty.Literal["system", "light", "dark"]
 type StyleName = str
@@ -76,6 +76,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def _setup_actions(self) -> None:
         self.new_action = QtGui.QAction("New", self)
         self.open_action = QtGui.QAction("Open...", self)
+        self.select_docs_action = QtGui.QAction("Select Game Data...", self)
         self.save_action = QtGui.QAction("Save", self)
         self.save_as_action = QtGui.QAction("Save As...", self)
         self.exit_action = QtGui.QAction("Exit", self)
@@ -89,22 +90,23 @@ class MainWindow(QtWidgets.QMainWindow):
         self.save_action.setShortcut(QtGui.QKeySequence.StandardKey.Save)
         self.save_as_action.setShortcut(QtGui.QKeySequence.StandardKey.SaveAs)
         self.new_action.setShortcut(QtGui.QKeySequence.StandardKey.New)
-        self.zoom_in_action.setShortcuts(
-            [
-                QtGui.QKeySequence(QtGui.QKeySequence.StandardKey.ZoomIn),
-                QtGui.QKeySequence("Ctrl+="),
-            ]
-        )
+        self.zoom_in_action.setShortcuts([
+            QtGui.QKeySequence(QtGui.QKeySequence.StandardKey.ZoomIn),
+            QtGui.QKeySequence("Ctrl+="),
+        ])
         self.zoom_out_action.setShortcut(QtGui.QKeySequence.StandardKey.ZoomOut)
         self.reset_zoom_action.setShortcut(QtGui.QKeySequence("Ctrl+0"))
 
         self.new_action.triggered.connect(self.new_chain)
         self.open_action.triggered.connect(self.open_chain)
+        self.select_docs_action.triggered.connect(self.select_docs_file)
         self.save_action.triggered.connect(self.save_chain)
         self.save_as_action.triggered.connect(self.save_chain_as)
         self.exit_action.triggered.connect(self.close)
         self.add_goal_recipe_action.triggered.connect(self.add_goal_recipe_from_ui)
-        self.add_shortage_recipe_action.triggered.connect(self.add_shortage_recipe_from_ui)
+        self.add_shortage_recipe_action.triggered.connect(
+            self.add_shortage_recipe_from_ui
+        )
         self.zoom_in_action.triggered.connect(self.zoom_in)
         self.zoom_out_action.triggered.connect(self.zoom_out)
         self.reset_zoom_action.triggered.connect(self.reset_zoom)
@@ -112,6 +114,7 @@ class MainWindow(QtWidgets.QMainWindow):
         file_menu = self.menuBar().addMenu("File")
         file_menu.addAction(self.new_action)
         file_menu.addAction(self.open_action)
+        file_menu.addAction(self.select_docs_action)
         file_menu.addSeparator()
         file_menu.addAction(self.save_action)
         file_menu.addAction(self.save_as_action)
@@ -163,8 +166,11 @@ class MainWindow(QtWidgets.QMainWindow):
         central.setLayout(layout)
 
         self.goal_label.setObjectName("goalLabel")
+        self.change_goal_button = QtWidgets.QPushButton("Set Goal...")
+        self.change_goal_button.clicked.connect(self.change_goal)
         header_layout = QtWidgets.QHBoxLayout()
         header_layout.addWidget(self.goal_label)
+        header_layout.addWidget(self.change_goal_button)
         header_layout.addStretch()
         header_layout.addWidget(QtWidgets.QLabel("Recipe scale"))
         for scale in self.SCALE_OPTIONS:
@@ -195,18 +201,26 @@ class MainWindow(QtWidgets.QMainWindow):
         layout.addWidget(QtWidgets.QLabel("Recipes"))
         action_layout = QtWidgets.QHBoxLayout()
         self.add_goal_recipe_button = QtWidgets.QPushButton("Add Goal Recipe...")
-        self.add_shortage_recipe_button = QtWidgets.QPushButton("Add Shortage Recipe...")
+        self.add_shortage_recipe_button = QtWidgets.QPushButton(
+            "Add Shortage Recipe..."
+        )
         self.add_goal_recipe_button.clicked.connect(self.add_goal_recipe_from_ui)
-        self.add_shortage_recipe_button.clicked.connect(self.add_shortage_recipe_from_ui)
+        self.add_shortage_recipe_button.clicked.connect(
+            self.add_shortage_recipe_from_ui
+        )
         action_layout.addWidget(self.add_goal_recipe_button)
         action_layout.addWidget(self.add_shortage_recipe_button)
         action_layout.addStretch()
         layout.addLayout(action_layout)
 
-        self.recipes_table.setColumnCount(4)
-        self.recipes_table.setHorizontalHeaderLabels(
-            ["Recipe", "Count", "Building", "Mean Power"]
-        )
+        self.recipes_table.setColumnCount(5)
+        self.recipes_table.setHorizontalHeaderLabels([
+            "",
+            "Recipe",
+            "Count",
+            "Building",
+            "Mean Power",
+        ])
         self.recipes_table.setEditTriggers(
             QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers
         )
@@ -215,14 +229,19 @@ class MainWindow(QtWidgets.QMainWindow):
             QtWidgets.QSizePolicy.Policy.Expanding,
         )
         recipe_header = self.recipes_table.horizontalHeader()
-        recipe_header.setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeMode.Stretch)
         recipe_header.setSectionResizeMode(
-            1,
+            0,
+            QtWidgets.QHeaderView.ResizeMode.Fixed,
+        )
+        self.recipes_table.setColumnWidth(0, 24)
+        recipe_header.setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeMode.Stretch)
+        recipe_header.setSectionResizeMode(
+            2,
             QtWidgets.QHeaderView.ResizeMode.ResizeToContents,
         )
-        recipe_header.setSectionResizeMode(2, QtWidgets.QHeaderView.ResizeMode.Stretch)
+        recipe_header.setSectionResizeMode(3, QtWidgets.QHeaderView.ResizeMode.Stretch)
         recipe_header.setSectionResizeMode(
-            3,
+            4,
             QtWidgets.QHeaderView.ResizeMode.ResizeToContents,
         )
         layout.addWidget(self.recipes_table)
@@ -290,11 +309,24 @@ class MainWindow(QtWidgets.QMainWindow):
         if goal is None:
             return
 
-        self.production_chain = pc.ProductionChain(goal=goal)
-        self.filename = None
-        self._mark_unsaved()
-        self.refresh()
+        self._set_goal_and_clear_recipes(goal)
         self.add_goal_recipe()
+
+    def change_goal(self) -> None:
+        if self.production_chain is not None and not self._confirm_clear_chain(
+            title="Change Goal",
+            message=(
+                "Changing the goal item clears all recipes in the current "
+                "production chain. Continue?"
+            ),
+        ):
+            return
+
+        goal = dialogs.choose_goal_item(game_data=self.game_data, parent=self)
+        if goal is None:
+            return
+
+        self._set_goal_and_clear_recipes(goal)
 
     def add_goal_recipe(self, amount_per_min: fr.Fraction | None = None) -> None:
         if self.production_chain is None:
@@ -392,6 +424,14 @@ class MainWindow(QtWidgets.QMainWindow):
     def add_shortage_recipe_from_ui(self) -> None:
         self.add_shortage_recipe()
 
+    def remove_recipe(self, recipe: ic.Recipe, _checked: bool = False) -> None:
+        if self.production_chain is None or recipe not in self.production_chain.recipes:
+            return
+
+        del self.production_chain.recipes[recipe]
+        self._mark_unsaved()
+        self.refresh()
+
     def open_chain(self) -> bool:
         filename_str, _selected_filter = QtWidgets.QFileDialog.getOpenFileName(
             self,
@@ -416,6 +456,47 @@ class MainWindow(QtWidgets.QMainWindow):
         self._sync_scale_combo()
         self.refresh()
         return True
+
+    def select_docs_file(self) -> None:
+        if not self._confirm_clear_chain(
+            title="Select Game Data",
+            message=(
+                "Changing the game data file clears the current production "
+                "chain and goal item. Continue?"
+            ),
+        ):
+            return
+
+        selection = dialogs.choose_docs_path(
+            message=(
+                "Choose the Satisfactory CommunityResources/Docs/en-us.json "
+                "file, or choose the Satisfactory install folder that contains it."
+            ),
+            parent=self,
+        )
+        if selection is None:
+            return
+
+        scale = self.game_data.scale
+        try:
+            game_data = ic.GameData.from_json(selection.docs_path)
+        except Exception as exc:
+            QtWidgets.QMessageBox.critical(self, "Game Data Load Failed", str(exc))
+            return
+
+        if scale != 1:
+            game_data.scale_recipes(scale)
+
+        self.docs_path = selection.docs_path
+        self.game_data = game_data
+        self.production_chain = None
+        self.filename = None
+        self.has_unsaved_changes = False
+        self.user_config.docs_path = selection.docs_path
+        self.user_config.game_path = selection.game_path
+        self._save_user_config()
+        self._sync_scale_combo()
+        self.refresh()
 
     def save_chain(self) -> None:
         if self.production_chain is None:
@@ -460,7 +541,9 @@ class MainWindow(QtWidgets.QMainWindow):
         chain = self.production_chain
         if chain is None:
             self.goal_label.setText("No production chain loaded")
-            self.status_label.setText("Choose File > New to select a goal item.")
+            self.status_label.setText(
+                "Choose Set Goal or File > New to select a goal item."
+            )
             self._fill_recipes_table(None)
             self._fill_net_table(self.inputs_table, {})
             self._fill_net_table(self.outputs_table, {})
@@ -482,7 +565,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self._update_recipe_actions()
         self._resize_table_rows()
 
-    def _handle_input_double_clicked(self, table_item: QtWidgets.QTableWidgetItem) -> None:
+    def _handle_input_double_clicked(
+        self, table_item: QtWidgets.QTableWidgetItem
+    ) -> None:
         if table_item.column() != 0:
             return
 
@@ -490,7 +575,9 @@ class MainWindow(QtWidgets.QMainWindow):
         if isinstance(item, ic.Item):
             self.add_shortage_recipe(shortage_item=item)
 
-    def _handle_net_amount_changed(self, table_item: QtWidgets.QTableWidgetItem) -> None:
+    def _handle_net_amount_changed(
+        self, table_item: QtWidgets.QTableWidgetItem
+    ) -> None:
         if self._refreshing_tables or table_item.column() != 1:
             return
         if self.production_chain is None:
@@ -627,7 +714,9 @@ class MainWindow(QtWidgets.QMainWindow):
             self._save_user_config()
 
     def _set_style(self, style_name: StyleName, *, persist: bool) -> None:
-        available_styles = {style.lower(): style for style in QtWidgets.QStyleFactory.keys()}
+        available_styles = {
+            style.lower(): style for style in QtWidgets.QStyleFactory.keys()
+        }
         actual_style_name = available_styles.get(style_name.lower())
         if actual_style_name is None:
             return
@@ -689,6 +778,25 @@ class MainWindow(QtWidgets.QMainWindow):
         self._sync_scale_combo()
         self.refresh()
 
+    def _set_goal_and_clear_recipes(self, goal: ic.Item) -> None:
+        self.production_chain = pc.ProductionChain(goal=goal)
+        self.filename = None
+        self._mark_unsaved()
+        self.refresh()
+
+    def _confirm_clear_chain(self, *, title: str, message: str) -> bool:
+        if self.production_chain is None:
+            return True
+
+        result = QtWidgets.QMessageBox.question(
+            self,
+            title,
+            message,
+            QtWidgets.QMessageBox.StandardButton.Yes
+            | QtWidgets.QMessageBox.StandardButton.No,
+        )
+        return result == QtWidgets.QMessageBox.StandardButton.Yes
+
     def _mark_unsaved(self) -> None:
         self.has_unsaved_changes = True
 
@@ -701,29 +809,45 @@ class MainWindow(QtWidgets.QMainWindow):
     def _make_light_palette() -> QtGui.QPalette:
         palette = QtGui.QPalette()
         palette.setColor(QtGui.QPalette.ColorRole.Window, QtGui.QColor(245, 245, 245))
-        palette.setColor(QtGui.QPalette.ColorRole.WindowText, QtCore.Qt.GlobalColor.black)
+        palette.setColor(
+            QtGui.QPalette.ColorRole.WindowText, QtCore.Qt.GlobalColor.black
+        )
         palette.setColor(QtGui.QPalette.ColorRole.Base, QtGui.QColor(255, 255, 255))
-        palette.setColor(QtGui.QPalette.ColorRole.AlternateBase, QtGui.QColor(240, 240, 240))
+        palette.setColor(
+            QtGui.QPalette.ColorRole.AlternateBase, QtGui.QColor(240, 240, 240)
+        )
         palette.setColor(QtGui.QPalette.ColorRole.Text, QtCore.Qt.GlobalColor.black)
         palette.setColor(QtGui.QPalette.ColorRole.Button, QtGui.QColor(245, 245, 245))
-        palette.setColor(QtGui.QPalette.ColorRole.ButtonText, QtCore.Qt.GlobalColor.black)
+        palette.setColor(
+            QtGui.QPalette.ColorRole.ButtonText, QtCore.Qt.GlobalColor.black
+        )
         palette.setColor(QtGui.QPalette.ColorRole.Highlight, QtGui.QColor(0, 120, 215))
-        palette.setColor(QtGui.QPalette.ColorRole.HighlightedText, QtCore.Qt.GlobalColor.white)
+        palette.setColor(
+            QtGui.QPalette.ColorRole.HighlightedText, QtCore.Qt.GlobalColor.white
+        )
         return palette
 
     @staticmethod
     def _make_dark_palette() -> QtGui.QPalette:
         palette = QtGui.QPalette()
         palette.setColor(QtGui.QPalette.ColorRole.Window, QtGui.QColor(45, 45, 48))
-        palette.setColor(QtGui.QPalette.ColorRole.WindowText, QtCore.Qt.GlobalColor.white)
+        palette.setColor(
+            QtGui.QPalette.ColorRole.WindowText, QtCore.Qt.GlobalColor.white
+        )
         palette.setColor(QtGui.QPalette.ColorRole.Base, QtGui.QColor(30, 30, 30))
-        palette.setColor(QtGui.QPalette.ColorRole.AlternateBase, QtGui.QColor(45, 45, 48))
+        palette.setColor(
+            QtGui.QPalette.ColorRole.AlternateBase, QtGui.QColor(45, 45, 48)
+        )
         palette.setColor(QtGui.QPalette.ColorRole.Text, QtCore.Qt.GlobalColor.white)
         palette.setColor(QtGui.QPalette.ColorRole.Button, QtGui.QColor(45, 45, 48))
-        palette.setColor(QtGui.QPalette.ColorRole.ButtonText, QtCore.Qt.GlobalColor.white)
+        palette.setColor(
+            QtGui.QPalette.ColorRole.ButtonText, QtCore.Qt.GlobalColor.white
+        )
         palette.setColor(QtGui.QPalette.ColorRole.BrightText, QtCore.Qt.GlobalColor.red)
         palette.setColor(QtGui.QPalette.ColorRole.Highlight, QtGui.QColor(0, 120, 215))
-        palette.setColor(QtGui.QPalette.ColorRole.HighlightedText, QtCore.Qt.GlobalColor.white)
+        palette.setColor(
+            QtGui.QPalette.ColorRole.HighlightedText, QtCore.Qt.GlobalColor.white
+        )
         return palette
 
     @staticmethod
@@ -958,9 +1082,14 @@ class MainWindow(QtWidgets.QMainWindow):
             )
 
         self.add_goal_recipe_action.setEnabled(has_chain)
-        self.add_shortage_recipe_action.setEnabled(has_chain and has_producible_shortages)
+        self.add_shortage_recipe_action.setEnabled(
+            has_chain and has_producible_shortages
+        )
         self.add_goal_recipe_button.setEnabled(has_chain)
-        self.add_shortage_recipe_button.setEnabled(has_chain and has_producible_shortages)
+        self.add_shortage_recipe_button.setEnabled(
+            has_chain and has_producible_shortages
+        )
+        self.change_goal_button.setEnabled(True)
 
     def _fill_recipes_table(self, chain: pc.ProductionChain | None) -> None:
         self.recipes_table.setRowCount(0)
@@ -970,6 +1099,12 @@ class MainWindow(QtWidgets.QMainWindow):
         recipes = sorted(chain.recipes.items(), key=lambda pair: pair[0].name.lower())
         self.recipes_table.setRowCount(len(recipes))
         for row, (recipe, count) in enumerate(recipes):
+            self.recipes_table.setCellWidget(
+                row,
+                0,
+                self._make_remove_recipe_button(recipe),
+            )
+
             building = recipe.produced_in.name if recipe.produced_in else ""
             values = [
                 recipe.name,
@@ -978,9 +1113,49 @@ class MainWindow(QtWidgets.QMainWindow):
                 f"{recipe.mean_power * count:.3f} MW",
             ]
             for col, value in enumerate(values):
-                self.recipes_table.setItem(row, col, QtWidgets.QTableWidgetItem(value))
+                self.recipes_table.setItem(
+                    row,
+                    col + 1,
+                    QtWidgets.QTableWidgetItem(value),
+                )
 
         self.recipes_table.resizeRowsToContents()
+
+    def _make_remove_recipe_button(self, recipe: ic.Recipe) -> QtWidgets.QWidget:
+        remove_button = QtWidgets.QToolButton()
+        remove_button.setIcon(self._make_remove_icon())
+        remove_button.setIconSize(QtCore.QSize(12, 12))
+        remove_button.setAutoRaise(True)
+        remove_button.setFixedSize(16, 16)
+        remove_button.setToolTip("Remove recipe")
+        remove_button.setAccessibleName("Remove recipe")
+        remove_button.clicked.connect(functools.partial(self.remove_recipe, recipe))
+
+        wrapper = QtWidgets.QWidget()
+        layout = QtWidgets.QHBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addStretch()
+        layout.addWidget(remove_button)
+        layout.addStretch()
+        wrapper.setLayout(layout)
+        return wrapper
+
+    def _make_remove_icon(self) -> QtGui.QIcon:
+        pixmap = QtGui.QPixmap(12, 12)
+        pixmap.fill(QtCore.Qt.GlobalColor.transparent)
+
+        color = self.palette().color(QtGui.QPalette.ColorRole.ButtonText)
+        painter = QtGui.QPainter(pixmap)
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
+        pen = QtGui.QPen(color, 1.8)
+        pen.setCapStyle(QtCore.Qt.PenCapStyle.RoundCap)
+        painter.setPen(pen)
+        painter.drawLine(3, 3, 9, 9)
+        painter.drawLine(9, 3, 3, 9)
+        painter.end()
+
+        return QtGui.QIcon(pixmap)
 
     def _fill_recipe_details(self, chain: pc.ProductionChain) -> None:
         self._clear_recipe_details()
