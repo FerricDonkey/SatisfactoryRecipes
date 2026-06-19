@@ -127,6 +127,34 @@ def test_window_renders_empty_state(
     assert not window.add_shortage_recipe_action.isEnabled()
 
 
+def test_cancelling_initial_goal_keeps_empty_window_open(
+    qtbot: pytestqt.qtbot.QtBot,
+    gui_scenario: GuiScenario,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    window = make_window(qtbot, gui_scenario, chain=None)
+
+    def cancel_initial_goal(**_kwargs: object) -> None:
+        return None
+
+    monkeypatch.setattr(dialogs, "choose_initial_goal_item", cancel_initial_goal)
+
+    window.prompt_for_goal_if_needed()
+
+    assert window.isVisible()
+    assert window.production_chain is None
+    assert window.goal_header.scale_combo.isEnabled()
+
+    def choose_goal(**_kwargs: object) -> ic.Item:
+        return gui_scenario.ingot
+
+    monkeypatch.setattr(dialogs, "choose_goal_item", choose_goal)
+    window.goal_header.change_goal_button.click()
+
+    assert window.production_chain is not None
+    assert window.production_chain.goal is gui_scenario.ingot
+
+
 def test_window_renders_representative_chain(
     qtbot: pytestqt.qtbot.QtBot,
     gui_scenario: GuiScenario,

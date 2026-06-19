@@ -147,7 +147,6 @@ class MainWindow(QtWidgets.QMainWindow):
                 parent=self,
             )
             if choice is None:
-                self.close()
                 return
             if choice is dialogs.GoalDialogAction.LOAD_FILE:
                 if self.open_chain():

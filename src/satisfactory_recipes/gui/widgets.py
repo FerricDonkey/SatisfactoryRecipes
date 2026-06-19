@@ -35,7 +35,7 @@ class GoalHeader(QtWidgets.QWidget):
 
         self.goal_label = QtWidgets.QLabel()
         self.goal_label.setObjectName("goalLabel")
-        self.change_goal_button = QtWidgets.QPushButton("Set Goal...")
+        self.change_goal_button = QtWidgets.QPushButton("Set Goal")
         self.scale_combo = QtWidgets.QComboBox()
         for scale in self.SCALE_OPTIONS:
             self.scale_combo.addItem(self._scale_display_text(scale), scale)
