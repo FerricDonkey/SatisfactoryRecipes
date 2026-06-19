@@ -168,6 +168,14 @@ class RecipesPanel(QtWidgets.QWidget):
             has_chain and has_producible_shortages
         )
 
+    def refresh_remove_icons(self) -> None:
+        """Repaint palette-dependent remove icons after appearance changes."""
+        for row in range(self.table.rowCount()):
+            wrapper = self.table.cellWidget(row, 0)
+            button = wrapper.findChild(QtWidgets.QToolButton)
+            if button is not None:
+                button.setIcon(self._make_remove_icon())
+
     def _make_remove_button(self, recipe: ic.Recipe) -> QtWidgets.QWidget:
         remove_button = QtWidgets.QToolButton()
         remove_button.setIcon(self._make_remove_icon())

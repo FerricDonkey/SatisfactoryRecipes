@@ -280,6 +280,7 @@ def test_saved_theme_style_and_zoom_are_applied(
         assert qapp.font().pointSizeF() == pytest.approx(
             original_font.pointSizeF() * 1.1**2
         )
+        assert window.appearance_manager.zoom_steps == 2
         assert qapp.styleSheet()
         checked_theme = window.theme_action_group.checkedAction()
         assert checked_theme is not None
@@ -287,6 +288,14 @@ def test_saved_theme_style_and_zoom_are_applied(
         checked_style = window.style_action_group.checkedAction()
         assert checked_style is not None
         assert str(checked_style.data()).lower() == original_style.lower()
+
+        wrapper = window.recipes_table.cellWidget(0, 0)
+        assert wrapper is not None
+        remove_button = wrapper.findChild(QtWidgets.QToolButton)
+        assert remove_button is not None
+        dark_icon_key = remove_button.icon().cacheKey()
+        window.appearance_manager.set_theme("light", persist=False)
+        assert remove_button.icon().cacheKey() != dark_icon_key
     finally:
         qapp.setPalette(original_palette)
         qapp.setFont(original_font)
