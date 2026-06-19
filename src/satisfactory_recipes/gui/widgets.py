@@ -7,7 +7,7 @@ import functools
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from satisfactory_recipes import info_classes as ic
-from satisfactory_recipes.gui import recipe_format
+from satisfactory_recipes.gui import number_format, recipe_format
 
 type ItemRates = cabc.Sequence[tuple[ic.Item, fr.Fraction]]
 type RecipeCounts = cabc.Sequence[tuple[ic.Recipe, fr.Fraction]]
@@ -39,6 +39,11 @@ class GoalHeader(QtWidgets.QWidget):
         self.scale_combo = QtWidgets.QComboBox()
         for scale in self.SCALE_OPTIONS:
             self.scale_combo.addItem(self._scale_display_text(scale), scale)
+            self.scale_combo.setItemData(
+                self.scale_combo.count() - 1,
+                number_format.exact_tooltip(scale),
+                QtCore.Qt.ItemDataRole.ToolTipRole,
+            )
 
         layout = QtWidgets.QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -76,7 +81,7 @@ class GoalHeader(QtWidgets.QWidget):
 
     @staticmethod
     def _scale_display_text(scale: fr.Fraction) -> str:
-        display = f"{float(scale):.2f}".rstrip("0")
+        display = number_format.decimal(scale, precision=2).rstrip("0")
         if display.endswith("."):
             display += "0"
         return display
@@ -153,14 +158,24 @@ class RecipesPanel(QtWidgets.QWidget):
         for row, (recipe, count) in enumerate(recipes):
             self.table.setCellWidget(row, 0, self._make_remove_button(recipe))
             building = recipe.produced_in.name if recipe.produced_in else ""
+            power = recipe.mean_power * count
             values = (
-                recipe.name,
-                f"{count:.3f}",
-                building,
-                f"{recipe.mean_power * count:.3f} MW",
+                (recipe.name, ""),
+                (
+                    number_format.decimal(count),
+                    number_format.exact_tooltip(count),
+                ),
+                (building, ""),
+                (
+                    number_format.decimal(power, unit="MW"),
+                    number_format.exact_tooltip(power, unit="MW"),
+                ),
             )
-            for column, value in enumerate(values, start=1):
-                self.table.setItem(row, column, QtWidgets.QTableWidgetItem(value))
+            for column, (value, tooltip) in enumerate(values, start=1):
+                table_item = QtWidgets.QTableWidgetItem(value)
+                if tooltip:
+                    table_item.setToolTip(tooltip)
+                self.table.setItem(row, column, table_item)
 
         self.table.resizeRowsToContents()
         self.add_goal_recipe_button.setEnabled(can_add_goal_recipe)
@@ -275,9 +290,11 @@ class NetItemsTable(QtWidgets.QTableWidget):
                 if self._activation_hint is not None:
                     name_item.setToolTip(self._activation_hint)
 
-                amount_item = QtWidgets.QTableWidgetItem(f"{amount:.3f}")
+                amount_item = QtWidgets.QTableWidgetItem(number_format.decimal(amount))
                 amount_item.setData(QtCore.Qt.ItemDataRole.UserRole, item)
-                amount_item.setToolTip(self.RATE_EDIT_HINT)
+                amount_item.setToolTip(
+                    number_format.exact_tooltip(amount, hint=self.RATE_EDIT_HINT)
+                )
                 self.setItem(row, 0, name_item)
                 self.setItem(row, 1, amount_item)
         finally:
@@ -351,12 +368,14 @@ class RecipeDetailsView(QtWidgets.QScrollArea):
         recipe: ic.Recipe,
         count: fr.Fraction,
     ) -> QtWidgets.QGroupBox:
-        card = QtWidgets.QGroupBox(f"{recipe.name} x {count:.3f}")
+        card = QtWidgets.QGroupBox(f"{recipe.name} x {number_format.decimal(count)}")
+        card.setToolTip(recipe_format.recipe_exact_tooltip(recipe, count))
         card_layout = QtWidgets.QVBoxLayout(card)
 
         body = QtWidgets.QLabel()
         body.setTextFormat(QtCore.Qt.TextFormat.RichText)
         body.setText(recipe_format.recipe_body_html(recipe, count))
+        body.setToolTip(recipe_format.recipe_exact_tooltip(recipe, count))
         body.setWordWrap(True)
         body.setTextInteractionFlags(
             QtCore.Qt.TextInteractionFlag.TextSelectableByMouse

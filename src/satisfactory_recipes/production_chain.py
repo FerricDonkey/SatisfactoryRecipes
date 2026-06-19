@@ -158,6 +158,10 @@ class ProductionChain:
             raise ValueError("Not allowed to scale to 0")
 
         net = self.get_net_per_min()
+        if item not in net:
+            raise ValueError(
+                f"Cannot scale {item.name}; item is not in production chain"
+            )
         current_amount = abs(net[item])
         if current_amount == 0:
             raise ValueError(f"Cannot scale {item.name}; current amount is 0")

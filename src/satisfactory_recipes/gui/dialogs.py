@@ -175,7 +175,7 @@ class _SearchDialog[T](QtWidgets.QDialog):
     def __init__(
         self,
         *,
-        options: ty.Iterable[tuple[str, T]],
+        options: ty.Iterable[dialog_components.SelectionOption[T]],
         title: str,
         search_placeholder: str,
         size: tuple[int, int],
@@ -270,7 +270,10 @@ class ItemSearchDialog(_SearchDialog[ic.Item]):
         self.selected_item: ic.Item | None = None
         self.goal_dialog_action: GoalDialogAction | None = None
         super().__init__(
-            options=((item.name, item) for item in items),
+            options=(
+                dialog_components.SelectionOption(label=item.name, value=item)
+                for item in items
+            ),
             title=title,
             search_placeholder="Search items",
             size=(520, 640),
@@ -366,7 +369,10 @@ class RecipeSearchDialog(_SearchDialog[ic.Recipe]):
         self.details = QtWidgets.QTextEdit()
         self.details.setReadOnly(True)
         super().__init__(
-            options=((recipe.name, recipe) for recipe in recipes),
+            options=(
+                dialog_components.SelectionOption(label=recipe.name, value=recipe)
+                for recipe in recipes
+            ),
             title=title,
             search_placeholder="Search recipes",
             size=(760, 640),
@@ -381,9 +387,13 @@ class RecipeSearchDialog(_SearchDialog[ic.Recipe]):
     def _update_recipe_preview(self, selected_object: object | None) -> None:
         if selected_object is None:
             self.details.clear()
+            self.details.setToolTip("")
             return
 
         recipe = ty.cast(ic.Recipe, selected_object)
+        self.details.setToolTip(
+            recipe_format.recipe_exact_tooltip(recipe, fr.Fraction(1))
+        )
         self.details.setHtml(
             recipe_format.recipe_details_document_html(
                 [recipe_format.recipe_details_html(recipe, fr.Fraction(1))]

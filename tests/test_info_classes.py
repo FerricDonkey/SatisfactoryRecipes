@@ -1,4 +1,6 @@
 import fractions as fr
+import json
+import pathlib
 
 import pytest
 
@@ -148,3 +150,61 @@ def test_game_data_scale_recipes_replaces_recipes_and_updates_scale() -> None:
     assert game_data.scale == fr.Fraction(1, 4)
     assert new_recipe is not old_recipe
     assert new_recipe.inputs[ore] == fr.Fraction(2)
+
+
+def test_game_data_reports_recipes_skipped_for_missing_items(
+    tmp_path: pathlib.Path,
+) -> None:
+    item_native_class = (
+        "/Script/CoreUObject.Class'/Script/FactoryGame.FGItemDescriptor'"
+    )
+    recipe_native_class = "/Script/CoreUObject.Class'/Script/FactoryGame.FGRecipe'"
+    known_item_class = "Desc_Known_C"
+    missing_item_class = "Desc_Missing_C"
+
+    def recipe_source(class_name: str, product_class: str) -> dict[str, str]:
+        return {
+            "ClassName": class_name,
+            "mDisplayName": class_name,
+            "mIngredients": "()",
+            "mProduct": (
+                f'((ItemClass="/Game/Test/{product_class}.{product_class}",Amount=1))'
+            ),
+            "mProducedIn": "()",
+            "mManufactoringDuration": "1",
+        }
+
+    docs = [
+        {
+            "NativeClass": item_native_class,
+            "Classes": [
+                {
+                    "ClassName": known_item_class,
+                    "mDisplayName": "Known Item",
+                    "mForm": "RF_SOLID",
+                    "mCachedStackSize": "100",
+                }
+            ],
+        },
+        {
+            "NativeClass": recipe_native_class,
+            "Classes": [
+                recipe_source("Recipe_Loaded_C", known_item_class),
+                recipe_source("Recipe_Skipped_C", missing_item_class),
+            ],
+        },
+    ]
+    docs_path = tmp_path / "en-us.json"
+    docs_path.write_text(json.dumps(docs))
+
+    game_data = ic.GameData.from_json(docs_path)
+
+    assert set(game_data.recipes_d) == {"Recipe_Loaded_C"}
+    assert game_data.parse_report == ic.ParseReport(
+        raw_recipe_count=2,
+        loaded_recipe_count=1,
+        skipped_recipe_count=1,
+        missing_item_classes_by_recipe={
+            "Recipe_Skipped_C": frozenset({missing_item_class})
+        },
+    )

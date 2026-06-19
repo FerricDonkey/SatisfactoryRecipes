@@ -1,12 +1,22 @@
 """Reusable components for searchable selections and exact rate entry."""
 
 import collections.abc as cabc
+import dataclasses
 import fractions as fr
 import typing as ty
 
 from PySide6 import QtCore, QtWidgets
 
 from satisfactory_recipes import search
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class SelectionOption[T]:
+    """One searchable row with display text kept separate from object identity."""
+
+    label: str
+    value: T
+    subtitle: str = ""
 
 
 class SearchableSelectionList[T](QtWidgets.QWidget):
@@ -18,14 +28,13 @@ class SearchableSelectionList[T](QtWidgets.QWidget):
     def __init__(
         self,
         *,
-        options: cabc.Iterable[tuple[str, T]],
+        options: cabc.Iterable[SelectionOption[T]],
         search_placeholder: str,
         detail_widget: QtWidgets.QWidget | None = None,
         parent: QtWidgets.QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        self._objects_by_name = dict(options)
-        self._all_names = sorted(self._objects_by_name)
+        self._options = tuple(options)
 
         self.search_edit = QtWidgets.QLineEdit()
         self.search_edit.setPlaceholderText(search_placeholder)
@@ -61,12 +70,18 @@ class SearchableSelectionList[T](QtWidgets.QWidget):
         return self._object_from_item(selected_items[0])
 
     def refresh(self, text: str) -> None:
-        names = search.sort_options(self._all_names, text) if text else self._all_names
+        options = (
+            search.sort_objects(self._options, text, label=lambda option: option.label)
+            if text
+            else sorted(self._options, key=lambda option: option.label)
+        )
 
         self.list_widget.clear()
-        for name in names:
-            item = QtWidgets.QListWidgetItem(name)
-            item.setData(QtCore.Qt.ItemDataRole.UserRole, self._objects_by_name[name])
+        for option in options:
+            item = QtWidgets.QListWidgetItem(option.label)
+            if option.subtitle:
+                item.setToolTip(option.subtitle)
+            item.setData(QtCore.Qt.ItemDataRole.UserRole, option.value)
             self.list_widget.addItem(item)
 
         if self.list_widget.count():

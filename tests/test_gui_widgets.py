@@ -2,7 +2,7 @@ import dataclasses
 import fractions as fr
 
 from PySide6 import QtWidgets
-from pytestqt.qtbot import QtBot
+import pytestqt.qtbot
 
 from satisfactory_recipes import info_classes as ic
 from satisfactory_recipes import production_chain as pc
@@ -41,7 +41,9 @@ def make_widget_scenario() -> tuple[
     return ore, ingot, recipe, chain
 
 
-def test_goal_header_displays_state_and_emits_user_intent(qtbot: QtBot) -> None:
+def test_goal_header_displays_state_and_emits_user_intent(
+    qtbot: pytestqt.qtbot.QtBot,
+) -> None:
     _ore, ingot, _recipe, _chain = make_widget_scenario()
     header = widgets.GoalHeader()
     qtbot.addWidget(header)
@@ -72,7 +74,9 @@ def test_goal_header_displays_state_and_emits_user_intent(qtbot: QtBot) -> None:
     assert requested_scales == [fr.Fraction(1, 4)]
 
 
-def test_recipes_panel_renders_and_emits_recipe_actions(qtbot: QtBot) -> None:
+def test_recipes_panel_renders_and_emits_recipe_actions(
+    qtbot: pytestqt.qtbot.QtBot,
+) -> None:
     _ore, _ingot, recipe, chain = make_widget_scenario()
     panel = widgets.RecipesPanel()
     qtbot.addWidget(panel)
@@ -108,6 +112,10 @@ def test_recipes_panel_renders_and_emits_recipe_actions(qtbot: QtBot) -> None:
     assert mean_power is not None
     assert recipe_name.text() == "Iron Ingot"
     assert mean_power.text() == "12.000 MW"
+    count = panel.table.item(0, 2)
+    assert count is not None
+    assert count.toolTip() == "Exact: 3"
+    assert mean_power.toolTip() == "Exact: 12 MW"
 
     panel.add_goal_recipe_button.click()
     panel.add_shortage_recipe_button.click()
@@ -124,7 +132,7 @@ def test_recipes_panel_renders_and_emits_recipe_actions(qtbot: QtBot) -> None:
 
 
 def test_net_items_table_renders_without_edit_signal_and_emits_exact_amount(
-    qtbot: QtBot,
+    qtbot: pytestqt.qtbot.QtBot,
 ) -> None:
     ore, _ingot, _recipe, _chain = make_widget_scenario()
     table = widgets.NetItemsTable()
@@ -143,14 +151,15 @@ def test_net_items_table_renders_without_edit_signal_and_emits_exact_amount(
 
     table.amount_edit_requested.connect(record_edit)
     table.item_activated.connect(record_activation)
-    table.set_view(((ore, fr.Fraction(5, 3)),))
+    table.set_view(((ore, fr.Fraction(5000, 3)),))
 
     assert edits == []
     name_item = table.item(0, 0)
     amount_item = table.item(0, 1)
     assert name_item is not None
     assert amount_item is not None
-    assert amount_item.text() == "1.667"
+    assert amount_item.text() == "1,666.667"
+    assert "Exact: 1,666 + 2/3" in amount_item.toolTip()
     assert "Double-click" in amount_item.toolTip()
 
     amount_item.setText("7/3")
@@ -161,7 +170,7 @@ def test_net_items_table_renders_without_edit_signal_and_emits_exact_amount(
 
 
 def test_chain_details_tabs_renders_all_views_and_forwards_shortage_request(
-    qtbot: QtBot,
+    qtbot: pytestqt.qtbot.QtBot,
 ) -> None:
     ore, ingot, _recipe, chain = make_widget_scenario()
     tabs = widgets.ChainDetailsTabs()

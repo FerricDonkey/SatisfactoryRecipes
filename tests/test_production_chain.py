@@ -234,7 +234,7 @@ def test_scale_item_rejects_item_not_in_chain() -> None:
 
     chain = pc.ProductionChain(goal=item)
 
-    with pytest.raises(ValueError, match="current amount is 0"):
+    with pytest.raises(ValueError, match="item is not in production chain"):
         chain.scale_item(other, fr.Fraction(10))
 
 
@@ -251,3 +251,11 @@ def test_scale_item_rejects_zero_current_amount(
 
     with pytest.raises(ValueError, match="current amount is 0"):
         chain.scale_item(item, fr.Fraction(10))
+
+
+def test_scale_item_rejects_zero_target() -> None:
+    item = support.make_fake_item("Desc_Item_C")
+    chain = pc.ProductionChain(goal=item)
+
+    with pytest.raises(ValueError, match="Not allowed to scale to 0"):
+        chain.scale_item(item, fr.Fraction(0))

@@ -5,14 +5,14 @@ import pathlib
 
 import pytest
 from PySide6 import QtGui, QtWidgets
-from pytestqt.qtbot import QtBot
+import pytestqt.qtbot
 
 from satisfactory_recipes import config as sr_config
 from satisfactory_recipes import info_classes as ic
 from satisfactory_recipes import production_chain as pc
 from satisfactory_recipes import stupid_classes as sc
 from satisfactory_recipes.gui import dialogs
-from satisfactory_recipes.gui.main_window import MainWindow
+from satisfactory_recipes.gui import main_window
 from tests import support
 
 
@@ -81,14 +81,14 @@ def gui_scenario() -> GuiScenario:
 
 
 def make_window(
-    qtbot: QtBot,
+    qtbot: pytestqt.qtbot.QtBot,
     scenario: GuiScenario,
     *,
     chain: pc.ProductionChain | None,
     configuration: sr_config.Configuration | None = None,
     filename: pathlib.Path | None = None,
-) -> MainWindow:
-    window = MainWindow(
+) -> main_window.MainWindow:
+    window = main_window.MainWindow(
         docs_path=pathlib.Path("fake-en-us.json"),
         game_data=scenario.game_data,
         user_config=configuration or sr_config.Configuration(),
@@ -97,7 +97,7 @@ def make_window(
     )
 
     def prepare_for_test_cleanup(widget: QtWidgets.QWidget) -> None:
-        assert isinstance(widget, MainWindow)
+        assert isinstance(widget, main_window.MainWindow)
         widget.has_unsaved_changes = False
 
     qtbot.addWidget(window, before_close_func=prepare_for_test_cleanup)
@@ -116,7 +116,7 @@ def get_table_item(
 
 
 def test_window_renders_empty_state(
-    qtbot: QtBot,
+    qtbot: pytestqt.qtbot.QtBot,
     gui_scenario: GuiScenario,
 ) -> None:
     window = make_window(qtbot, gui_scenario, chain=None)
@@ -130,7 +130,7 @@ def test_window_renders_empty_state(
 
 
 def test_window_renders_representative_chain(
-    qtbot: QtBot,
+    qtbot: pytestqt.qtbot.QtBot,
     gui_scenario: GuiScenario,
 ) -> None:
     window = make_window(qtbot, gui_scenario, chain=gui_scenario.chain)
@@ -165,7 +165,7 @@ def test_window_renders_representative_chain(
 
 
 def test_recipe_actions_follow_available_shortages(
-    qtbot: QtBot,
+    qtbot: pytestqt.qtbot.QtBot,
     gui_scenario: GuiScenario,
 ) -> None:
     window = make_window(qtbot, gui_scenario, chain=gui_scenario.chain)
@@ -183,7 +183,7 @@ def test_recipe_actions_follow_available_shortages(
 
 
 def test_refresh_computes_chain_view_state_once(
-    qtbot: QtBot,
+    qtbot: pytestqt.qtbot.QtBot,
     gui_scenario: GuiScenario,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -211,7 +211,7 @@ def test_refresh_computes_chain_view_state_once(
 
 
 def test_remove_recipe_button_updates_chain_and_dirty_state(
-    qtbot: QtBot,
+    qtbot: pytestqt.qtbot.QtBot,
     gui_scenario: GuiScenario,
 ) -> None:
     window = make_window(qtbot, gui_scenario, chain=gui_scenario.chain)
@@ -229,7 +229,7 @@ def test_remove_recipe_button_updates_chain_and_dirty_state(
 
 
 def test_editing_net_rate_scales_chain_exactly(
-    qtbot: QtBot,
+    qtbot: pytestqt.qtbot.QtBot,
     gui_scenario: GuiScenario,
 ) -> None:
     window = make_window(qtbot, gui_scenario, chain=gui_scenario.chain)
@@ -244,7 +244,7 @@ def test_editing_net_rate_scales_chain_exactly(
 
 
 def test_double_clicking_input_adds_recipe_for_that_shortage(
-    qtbot: QtBot,
+    qtbot: pytestqt.qtbot.QtBot,
     gui_scenario: GuiScenario,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -275,7 +275,7 @@ def test_double_clicking_input_adds_recipe_for_that_shortage(
 
 
 def test_destructive_actions_stop_when_dirty_confirmation_is_cancelled(
-    qtbot: QtBot,
+    qtbot: pytestqt.qtbot.QtBot,
     gui_scenario: GuiScenario,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -305,7 +305,7 @@ def test_destructive_actions_stop_when_dirty_confirmation_is_cancelled(
 
 
 def test_new_chain_continues_when_dirty_changes_are_discarded(
-    qtbot: QtBot,
+    qtbot: pytestqt.qtbot.QtBot,
     gui_scenario: GuiScenario,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -319,14 +319,14 @@ def test_new_chain_continues_when_dirty_changes_are_discarded(
         return gui_scenario.ingot
 
     def skip_goal_recipe(
-        _window: MainWindow,
+        _window: main_window.MainWindow,
         amount_per_min: fr.Fraction | None = None,
     ) -> None:
         del amount_per_min
 
     monkeypatch.setattr(QtWidgets.QMessageBox, "question", discard_changes)
     monkeypatch.setattr(dialogs, "choose_goal_item", choose_new_goal)
-    monkeypatch.setattr(MainWindow, "add_goal_recipe", skip_goal_recipe)
+    monkeypatch.setattr(main_window.MainWindow, "add_goal_recipe", skip_goal_recipe)
 
     window.new_chain()
 
@@ -336,7 +336,7 @@ def test_new_chain_continues_when_dirty_changes_are_discarded(
 
 
 def test_window_close_prompts_only_for_dirty_work(
-    qtbot: QtBot,
+    qtbot: pytestqt.qtbot.QtBot,
     gui_scenario: GuiScenario,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -373,7 +373,7 @@ def test_window_close_prompts_only_for_dirty_work(
 
 
 def test_save_failure_preserves_dirty_state_and_filename(
-    qtbot: QtBot,
+    qtbot: pytestqt.qtbot.QtBot,
     gui_scenario: GuiScenario,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -414,7 +414,7 @@ def test_save_failure_preserves_dirty_state_and_filename(
 
 
 def test_save_as_failure_does_not_replace_filename(
-    qtbot: QtBot,
+    qtbot: pytestqt.qtbot.QtBot,
     gui_scenario: GuiScenario,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: pathlib.Path,
@@ -453,7 +453,7 @@ def test_save_as_failure_does_not_replace_filename(
 
 
 def test_successful_save_as_updates_filename_and_clears_dirty_state(
-    qtbot: QtBot,
+    qtbot: pytestqt.qtbot.QtBot,
     gui_scenario: GuiScenario,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: pathlib.Path,
@@ -476,7 +476,7 @@ def test_successful_save_as_updates_filename_and_clears_dirty_state(
 
 
 def test_scale_combo_reflects_current_game_data_scale(
-    qtbot: QtBot,
+    qtbot: pytestqt.qtbot.QtBot,
     gui_scenario: GuiScenario,
 ) -> None:
     gui_scenario.game_data.scale = fr.Fraction(1, 2)
@@ -487,7 +487,7 @@ def test_scale_combo_reflects_current_game_data_scale(
 
 
 def test_saved_theme_style_and_zoom_are_applied(
-    qtbot: QtBot,
+    qtbot: pytestqt.qtbot.QtBot,
     gui_scenario: GuiScenario,
     qapp: QtWidgets.QApplication,
     monkeypatch: pytest.MonkeyPatch,

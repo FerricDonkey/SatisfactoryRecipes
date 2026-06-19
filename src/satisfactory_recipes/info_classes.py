@@ -385,12 +385,23 @@ class Recipe(_BaseInfo):
         )
 
 
+@dataclasses.dataclass(frozen=True, kw_only=True, slots=True)
+class ParseReport:
+    """Structured diagnostics from loading a Satisfactory docs file."""
+
+    raw_recipe_count: int
+    loaded_recipe_count: int
+    skipped_recipe_count: int
+    missing_item_classes_by_recipe: dict[str, frozenset[str]]
+
+
 @dataclasses.dataclass(kw_only=True)
 class GameData:
     buildings_d: dict[str, Building]
     items_d: dict[str, Item]
     recipes_d: dict[str, Recipe]
     scale: fr.Fraction = fr.Fraction(1)
+    parse_report: ParseReport | None = None
 
     def scale_recipes(self, factor: fr.Fraction) -> None:
         """Replace recipes with scaled version."""
@@ -452,6 +463,21 @@ class GameData:
             building.class_name: building for building in buildings_d.values()
         }
 
+        missing_item_classes_by_recipe = {
+            key_name: frozenset(
+                item_cn
+                for source in (base_recipe.products, base_recipe.ingredients)
+                for item_cn in source
+                if item_cn not in class_name_to_item_d
+            )
+            for key_name, base_recipe in recipes_base.items()
+        }
+        missing_item_classes_by_recipe = {
+            key_name: missing_items
+            for key_name, missing_items in missing_item_classes_by_recipe.items()
+            if missing_items
+        }
+
         recipes_d = {
             key_name: Recipe.from_base_recipe(
                 base_recipe=base_recipe,
@@ -459,17 +485,21 @@ class GameData:
                 class_name_to_building_d=class_name_to_building_d,
             )
             for key_name, base_recipe in recipes_base.items()
-            if all(
-                item_cn in class_name_to_item_d
-                for source in (base_recipe.products, base_recipe.ingredients)
-                for item_cn in source
-            )
+            if key_name not in missing_item_classes_by_recipe
         }
+
+        parse_report = ParseReport(
+            raw_recipe_count=len(recipes_base),
+            loaded_recipe_count=len(recipes_d),
+            skipped_recipe_count=len(missing_item_classes_by_recipe),
+            missing_item_classes_by_recipe=missing_item_classes_by_recipe,
+        )
 
         return cls(
             buildings_d=buildings_d,
             items_d=items_d,
             recipes_d=recipes_d,
+            parse_report=parse_report,
         )
 
     @property

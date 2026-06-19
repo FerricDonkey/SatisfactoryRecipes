@@ -1,12 +1,12 @@
 from PySide6 import QtGui, QtWidgets
-from pytestqt.qtbot import QtBot
+import pytestqt.qtbot
 
 from satisfactory_recipes import config as sr_config
-from satisfactory_recipes.gui.appearance import AppearanceManager, ThemeName
+from satisfactory_recipes.gui import appearance
 
 
 def test_appearance_manager_owns_actions_and_persists_user_changes(
-    qtbot: QtBot,
+    qtbot: pytestqt.qtbot.QtBot,
     qapp: QtWidgets.QApplication,
 ) -> None:
     original_palette = QtGui.QPalette(qapp.palette())
@@ -20,7 +20,7 @@ def test_appearance_manager_owns_actions_and_persists_user_changes(
         nonlocal save_count
         save_count += 1
 
-    manager = AppearanceManager(
+    manager = appearance.AppearanceManager(
         configuration=configuration,
         save_callback=record_save,
     )
@@ -78,7 +78,7 @@ def test_saved_preferences_apply_without_rewriting_valid_config(
         nonlocal save_count
         save_count += 1
 
-    manager = AppearanceManager(
+    manager = appearance.AppearanceManager(
         configuration=configuration,
         save_callback=record_save,
     )
@@ -110,7 +110,7 @@ def test_invalid_saved_style_is_cleared_and_saved() -> None:
         nonlocal save_count
         save_count += 1
 
-    manager = AppearanceManager(
+    manager = appearance.AppearanceManager(
         configuration=configuration,
         save_callback=record_save,
     )
@@ -122,14 +122,14 @@ def test_invalid_saved_style_is_cleared_and_saved() -> None:
 
 
 def test_every_available_qt_style_supports_each_theme(
-    qtbot: QtBot,
+    qtbot: pytestqt.qtbot.QtBot,
     qapp: QtWidgets.QApplication,
 ) -> None:
     original_palette = QtGui.QPalette(qapp.palette())
     original_font = QtGui.QFont(qapp.font())
     original_stylesheet = qapp.styleSheet()
     original_style = qapp.style().objectName()
-    manager = AppearanceManager(
+    manager = appearance.AppearanceManager(
         configuration=sr_config.Configuration(),
         save_callback=lambda: None,
     )
@@ -137,7 +137,7 @@ def test_every_available_qt_style_supports_each_theme(
     probe.setItem(0, 0, QtWidgets.QTableWidgetItem("Theme probe"))
     qtbot.addWidget(probe)
     probe.show()
-    themes: tuple[ThemeName, ...] = ("system", "light", "dark")
+    themes: tuple[appearance.ThemeName, ...] = ("system", "light", "dark")
 
     try:
         for style_name in QtWidgets.QStyleFactory.keys():

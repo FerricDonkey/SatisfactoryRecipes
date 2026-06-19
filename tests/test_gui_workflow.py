@@ -4,18 +4,18 @@ import pathlib
 
 import pytest
 from PySide6 import QtWidgets
-from pytestqt.qtbot import QtBot
+import pytestqt.qtbot
 
 from satisfactory_recipes import config as sr_config
 from satisfactory_recipes import info_classes as ic
 from satisfactory_recipes import interactive_mode as im
 from satisfactory_recipes.gui import dialogs
-from satisfactory_recipes.gui.main_window import MainWindow
+from satisfactory_recipes.gui import main_window
 from tests import support
 
 
 def test_create_scale_save_and_reopen_complete_chain(
-    qtbot: QtBot,
+    qtbot: pytestqt.qtbot.QtBot,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: pathlib.Path,
 ) -> None:
@@ -57,14 +57,14 @@ def test_create_scale_save_and_reopen_complete_chain(
     game_data.scale_recipes(fr.Fraction(1, 2))
     scaled_ingot_recipe = game_data.recipes_d[ingot_recipe.class_name]
     scaled_plate_recipe = game_data.recipes_d[plate_recipe.class_name]
-    window = MainWindow(
+    window = main_window.MainWindow(
         docs_path=pathlib.Path("fake-en-us.json"),
         game_data=game_data,
         user_config=sr_config.Configuration(),
     )
 
     def prepare_for_test_cleanup(widget: QtWidgets.QWidget) -> None:
-        assert isinstance(widget, MainWindow)
+        assert isinstance(widget, main_window.MainWindow)
         widget.has_unsaved_changes = False
 
     qtbot.addWidget(window, before_close_func=prepare_for_test_cleanup)

@@ -1,13 +1,13 @@
 """Application-wide GUI theme, style, and zoom management."""
 
 import collections.abc as cabc
-from typing import Literal
+import typing as ty
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from satisfactory_recipes import config as sr_config
 
-type ThemeName = Literal["system", "light", "dark"]
+type ThemeName = ty.Literal["system", "light", "dark"]
 type SaveCallback = cabc.Callable[[], None]
 
 

@@ -2,22 +2,22 @@ import fractions as fr
 
 import pytest
 from PySide6 import QtWidgets
-from pytestqt.qtbot import QtBot
+import pytestqt.qtbot
 
 from satisfactory_recipes.gui import dialog_components
 
 
 def test_searchable_selection_filters_selects_and_emits_activation(
-    qtbot: QtBot,
+    qtbot: pytestqt.qtbot.QtBot,
 ) -> None:
     iron_plate = object()
     iron_rod = object()
     copper_sheet = object()
     selector = dialog_components.SearchableSelectionList(
         options=[
-            ("Iron Plate", iron_plate),
-            ("Iron Rod", iron_rod),
-            ("Copper Sheet", copper_sheet),
+            dialog_components.SelectionOption("Iron Plate", iron_plate),
+            dialog_components.SelectionOption("Iron Rod", iron_rod),
+            dialog_components.SelectionOption("Copper Sheet", copper_sheet),
         ],
         search_placeholder="Search items",
     )
@@ -41,7 +41,32 @@ def test_searchable_selection_filters_selects_and_emits_activation(
     assert activated == [iron_rod]
 
 
-def test_positive_fraction_input_returns_an_exact_value(qtbot: QtBot) -> None:
+def test_searchable_selection_preserves_duplicate_labels(
+    qtbot: pytestqt.qtbot.QtBot,
+) -> None:
+    first = object()
+    second = object()
+    selector = dialog_components.SearchableSelectionList(
+        options=[
+            dialog_components.SelectionOption("Alternate Recipe", first),
+            dialog_components.SelectionOption("Alternate Recipe", second),
+        ],
+        search_placeholder="Search recipes",
+    )
+    qtbot.addWidget(selector)
+
+    selector.search_edit.setText("alternate")
+
+    assert selector.list_widget.count() == 2
+    selector.list_widget.setCurrentRow(0)
+    assert selector.selected_object is first
+    selector.list_widget.setCurrentRow(1)
+    assert selector.selected_object is second
+
+
+def test_positive_fraction_input_returns_an_exact_value(
+    qtbot: pytestqt.qtbot.QtBot,
+) -> None:
     fraction_input = dialog_components.PositiveFractionInput(
         label="Per minute",
         initial_text="7/3",
@@ -53,7 +78,7 @@ def test_positive_fraction_input_returns_an_exact_value(qtbot: QtBot) -> None:
 
 @pytest.mark.parametrize("text", ["", "nonsense", "0", "-2", "1/0"])
 def test_positive_fraction_input_rejects_invalid_values(
-    qtbot: QtBot,
+    qtbot: pytestqt.qtbot.QtBot,
     text: str,
 ) -> None:
     fraction_input = dialog_components.PositiveFractionInput(
@@ -67,7 +92,7 @@ def test_positive_fraction_input_rejects_invalid_values(
 
 
 def test_positive_fraction_input_uses_one_validation_message(
-    qtbot: QtBot,
+    qtbot: pytestqt.qtbot.QtBot,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     fraction_input = dialog_components.PositiveFractionInput(

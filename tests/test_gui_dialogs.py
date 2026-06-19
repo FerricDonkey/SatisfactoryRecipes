@@ -3,22 +3,20 @@ import fractions as fr
 
 import pytest
 from PySide6 import QtWidgets
-from pytestqt.qtbot import QtBot
+import pytestqt.qtbot
 
 from satisfactory_recipes import info_classes as ic
-from satisfactory_recipes.gui.dialogs import (
-    ItemSearchDialog,
-    PositiveFractionDialog,
-    RecipeSearchDialog,
-)
+from satisfactory_recipes.gui import dialogs
 from tests import support
 
 
-def test_item_search_filters_and_returns_exact_amount(qtbot: QtBot) -> None:
+def test_item_search_filters_and_returns_exact_amount(
+    qtbot: pytestqt.qtbot.QtBot,
+) -> None:
     iron_plate = support.make_fake_item("Iron Plate")
     iron_rod = support.make_fake_item("Iron Rod")
     copper_sheet = support.make_fake_item("Copper Sheet")
-    dialog = ItemSearchDialog(
+    dialog = dialogs.ItemSearchDialog(
         items=[iron_plate, iron_rod, copper_sheet],
         title="Choose Item",
         show_amount=True,
@@ -42,7 +40,9 @@ def test_item_search_filters_and_returns_exact_amount(qtbot: QtBot) -> None:
     assert dialog.selected_amount_per_min == fr.Fraction(1, 3)
 
 
-def test_recipe_search_updates_preview_and_returns_selection(qtbot: QtBot) -> None:
+def test_recipe_search_updates_preview_and_returns_selection(
+    qtbot: pytestqt.qtbot.QtBot,
+) -> None:
     ore = support.make_fake_item("Iron Ore")
     ingot = support.make_fake_item("Iron Ingot")
     smelter = ic.Building(
@@ -60,7 +60,7 @@ def test_recipe_search_updates_preview_and_returns_selection(qtbot: QtBot) -> No
         ),
         produced_in=smelter,
     )
-    dialog = RecipeSearchDialog(
+    dialog = dialogs.RecipeSearchDialog(
         recipes=[recipe],
         title="Choose Recipe",
         show_amount=True,
@@ -82,9 +82,11 @@ def test_recipe_search_updates_preview_and_returns_selection(qtbot: QtBot) -> No
     assert dialog.selected_amount_per_min == fr.Fraction(7, 3)
 
 
-def test_item_search_double_click_accepts_current_item(qtbot: QtBot) -> None:
+def test_item_search_double_click_accepts_current_item(
+    qtbot: pytestqt.qtbot.QtBot,
+) -> None:
     iron_plate = support.make_fake_item("Iron Plate")
-    dialog = ItemSearchDialog(items=[iron_plate], title="Choose Item")
+    dialog = dialogs.ItemSearchDialog(items=[iron_plate], title="Choose Item")
     qtbot.addWidget(dialog)
 
     dialog.item_list.itemDoubleClicked.emit(dialog.item_list.item(0))
@@ -94,11 +96,11 @@ def test_item_search_double_click_accepts_current_item(qtbot: QtBot) -> None:
 
 
 def test_invalid_amount_keeps_search_dialog_open(
-    qtbot: QtBot,
+    qtbot: pytestqt.qtbot.QtBot,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     iron_plate = support.make_fake_item("Iron Plate")
-    dialog = ItemSearchDialog(
+    dialog = dialogs.ItemSearchDialog(
         items=[iron_plate],
         title="Choose Item",
         show_amount=True,
@@ -124,8 +126,10 @@ def test_invalid_amount_keeps_search_dialog_open(
     assert warnings == [("Invalid Amount", "Enter a positive number or fraction.")]
 
 
-def test_positive_fraction_dialog_accepts_exact_fraction(qtbot: QtBot) -> None:
-    dialog = PositiveFractionDialog(title="Scale Chain", label="Per minute")
+def test_positive_fraction_dialog_accepts_exact_fraction(
+    qtbot: pytestqt.qtbot.QtBot,
+) -> None:
+    dialog = dialogs.PositiveFractionDialog(title="Scale Chain", label="Per minute")
     qtbot.addWidget(dialog)
     dialog.fraction_input.line_edit.setText("11/7")
     buttons = dialog.findChild(QtWidgets.QDialogButtonBox)

@@ -1,12 +1,14 @@
 """Shared rich recipe formatting for GUI views."""
 
 import fractions as fr
+import html
 
 from satisfactory_recipes import info_classes as ic
+from satisfactory_recipes.gui import number_format
 
 
 def recipe_details_html(recipe: ic.Recipe, count: fr.Fraction) -> str:
-    title = f"{recipe.name} x {count:.3f}"
+    title = f"{html.escape(recipe.name)} x {number_format.decimal(count)}"
     return (
         '<div class="recipe-card">'
         f'<div class="recipe-title">{title}</div>'
@@ -18,15 +20,17 @@ def recipe_details_html(recipe: ic.Recipe, count: fr.Fraction) -> str:
 def recipe_body_html(recipe: ic.Recipe, count: fr.Fraction) -> str:
     produce_items = "".join(
         "<li>"
-        f"<b>{item.name}</b> x {recipe.products[item]:.1f} "
-        f"({per_min * count:.3f}/min)"
+        f"<b>{html.escape(item.name)}</b> x "
+        f"{number_format.decimal(recipe.products[item], precision=1)} "
+        f"({number_format.decimal(per_min * count)}/min)"
         "</li>"
         for item, per_min in recipe.products_per_min.items()
     )
     consume_items = "".join(
         "<li>"
-        f"<b>{item.name}</b> x {recipe.inputs[item]:.1f} "
-        f"({per_min * count:.3f}/min)"
+        f"<b>{html.escape(item.name)}</b> x "
+        f"{number_format.decimal(recipe.inputs[item], precision=1)} "
+        f"({number_format.decimal(per_min * count)}/min)"
         "</li>"
         for item, per_min in recipe.inputs_per_min.items()
     )
@@ -35,8 +39,9 @@ def recipe_body_html(recipe: ic.Recipe, count: fr.Fraction) -> str:
     if recipe.produced_in is not None:
         produced_in = (
             '<div class="power">'
-            f"Produced in <b>{recipe.produced_in.name}</b> "
-            f"({recipe.mean_power} MW each: {recipe.mean_power * count:.3f} MW)"
+            f"Produced in <b>{html.escape(recipe.produced_in.name)}</b> "
+            f"({number_format.decimal(recipe.mean_power, unit='MW')} each: "
+            f"{number_format.decimal(recipe.mean_power * count, unit='MW')})"
             "</div>"
         )
 
@@ -47,6 +52,28 @@ def recipe_body_html(recipe: ic.Recipe, count: fr.Fraction) -> str:
         f"<ul>{consume_items}</ul>"
         f"{produced_in}"
     )
+
+
+def recipe_exact_tooltip(recipe: ic.Recipe, count: fr.Fraction) -> str:
+    """Return a rich tooltip listing the exact values displayed for a recipe."""
+    lines = [f"Recipe count: {number_format.mixed_number(count)}"]
+    lines.extend(
+        f"Product {item.name}: {number_format.mixed_number(recipe.products[item])} "
+        f"per craft; {number_format.mixed_number(per_min * count)}/min"
+        for item, per_min in recipe.products_per_min.items()
+    )
+    lines.extend(
+        f"Input {item.name}: {number_format.mixed_number(recipe.inputs[item])} "
+        f"per craft; {number_format.mixed_number(per_min * count)}/min"
+        for item, per_min in recipe.inputs_per_min.items()
+    )
+    if recipe.produced_in is not None:
+        lines.append(
+            "Mean power: "
+            f"{number_format.mixed_number(recipe.mean_power)} MW each; "
+            f"{number_format.mixed_number(recipe.mean_power * count)} MW total"
+        )
+    return f"<pre>{html.escape(chr(10).join(lines))}</pre>"
 
 
 def recipe_details_document_html(recipe_blocks: list[str]) -> str:
