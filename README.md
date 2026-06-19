@@ -6,11 +6,11 @@ Satisfactory Recipes is a bookkeeping tool for planning production chains in the
 
 You choose an item you want to make. You add a recipe to produce some number of that item. You add recipes to produce any ingredients you need for that recipe. You add recipes to produce ingredients needed to produce those ingredients. Lather, rinse, repeat.
 
-The program remembers what you tell it, and scales recipes to make the required number of each ingredient automatically, as well as providing recipes that can make the item. It also allows you scale the whole kit and kaboodle up or down to produce or consume any amount of any item involved.
+The program remembers what you tell it, and scales recipes to make the required number of each ingredient automatically, as well as providing recipes that can make the item. It also allows you to scale the whole kit and kaboodle up or down to produce or consume any amount of any item involved.
 
 The program DOES tell you how many of each input you need, and how many of each machine making each recipe you need. It will give an estimated mean power consumption, ignoring sloops, clock speed, games settings etc.
 
-The program DOES NOT tell you which machines hook to which means or which outputs go to which inputs. But it DOES give you a list of all recipes with their scaled inputs and outputs. Figuring out how to hook them up is up to you.
+The program DOES NOT tell you which machines hook to which, or which outputs go to which inputs. But it DOES give you a list of all recipes with their scaled inputs and outputs. Figuring out how to hook them up is up to you.
 
 **NOTE:** This uses fractions for math, to avoid float rounding. This does mean that if you mean 1/3, you should enter 1/3, not 0.333. And  if you mean 5/3, you should enter 5/3, not 1.6666.
 
@@ -20,13 +20,13 @@ Recipes etc are read from game files that YOU must provide, but the program trie
 
 ### "Sweaty nerds, where exe" Installation
 
-Download and use the exe. Windows will yell at you and tell you it's unsafe. It's not, unless I got supply-chained, but it's up to you if you trust that. If you don't like that, follow the below step. It's not any safer, but it might feel like it is.
+Download and use the exe. There's a release button somewhere on the right, probably, unless they moved it. Windows will yell at you and tell you it's unsigned and so might be unsafe. It's not, probably, unless I got supply-chained, but it's up to you if you trust that. If you don't like that, follow the below procedures. They're not any safer, but they might feel like they are.
 
 This works on windows because that's all I did. Find some other sweaty nerd to convert it to executables for your OS, if you want.
 
 ### "I am the sweaty nerd" Installation
 
-Get python 3.14 somehow. Install this package into it. You will need uv build. If you install uv and git for your os first (see their docs), then:
+Get python 3.14 somehow. Install this package into it. If you follow the below, you will need uv and git (though you can download the source as a zip and unzip to not need git). See their docs for installing uv and git. If you elect to skip uv and use pip directly, you may need `uv_build` pip installed first.
 
 ```bash
 git clone https://github.com/FerricDonkey/SatisfactoryRecipes.git
@@ -48,6 +48,10 @@ mkdir dist
 uv run --no-sync pyside6-deploy -c pysidedeploy.spec -f --name SatisfactoryRecipes
 ./dist/SatisfactoryRecipes.exe  # Launches
 ```
+
+This command may modify the spec file. I may get around to avoiding that one day. Until then, be aware. It'll probably keep working after modification, if not re check it out.
+
+This worked for me inside git-bash, with some random devy stuff installed. You may need Visual Studio C++ Build tools or similar.
 
 ## Usage
 
@@ -82,9 +86,9 @@ It'll remember some of your preferences by putting them in some directory that t
 
 ## Satisfactory Docs Discovery
 
-This program needs the satisfactory information stored in there `en-US.json` (will other localizations work? I dunno, never tried. Knock yourself out, see what happens).
+This program needs the satisfactory information stored in a file included with the Satisfactory game called `en-US.json` (will other localizations work? I dunno, never tried. Knock yourself out, see what happens).
 
-That file isn't mine, so I'm not giving it to you. But if you own satisfactory and have it installed, then you have that file, and you can use it. The program will search some places that I thought it might be on windows, plus some places that an AI thought it might be for people who use weird operating systems. If we didn't guess where yours is, you can enter a path. It should be in `your_satisfactory_installdir/CommunityResources/Docs/en-us.json`
+That file isn't mine, so I'm not giving it to you. But if you own satisfactory and have it installed, then you have that file, and you can use it. The program will search some places that I thought it might be on windows, plus some places that an AI thought it might be for people who use weird operating systems. If we didn't guess where yours is, you can enter a path. It should be in `your_satisfactory_installdir/CommunityResources/Docs/en-US.json`
 
 ## License
 
