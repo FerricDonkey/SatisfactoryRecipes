@@ -95,7 +95,12 @@ def make_window(
         production_chain=chain,
         filename=filename,
     )
-    qtbot.addWidget(window)
+
+    def prepare_for_test_cleanup(widget: QtWidgets.QWidget) -> None:
+        assert isinstance(widget, MainWindow)
+        widget.has_unsaved_changes = False
+
+    qtbot.addWidget(window, before_close_func=prepare_for_test_cleanup)
     window.show()
     return window
 
@@ -261,6 +266,207 @@ def test_double_clicking_input_adds_recipe_for_that_shortage(
     assert get_table_item(window.inputs_table, 0, 0).text() == "Ore"
     assert get_table_item(window.inputs_table, 0, 1).text() == "12.000"
     assert not window.add_shortage_recipe_action.isEnabled()
+
+
+def test_destructive_actions_stop_when_dirty_confirmation_is_cancelled(
+    qtbot: QtBot,
+    gui_scenario: GuiScenario,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    window = make_window(qtbot, gui_scenario, chain=gui_scenario.chain)
+    window.has_unsaved_changes = True
+    confirmation_count = 0
+
+    def cancel_discard(*_args: object, **_kwargs: object) -> object:
+        nonlocal confirmation_count
+        confirmation_count += 1
+        return QtWidgets.QMessageBox.StandardButton.Cancel
+
+    def unexpected_dialog(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("destructive workflow continued after cancellation")
+
+    monkeypatch.setattr(QtWidgets.QMessageBox, "question", cancel_discard)
+    monkeypatch.setattr(dialogs, "choose_goal_item", unexpected_dialog)
+    monkeypatch.setattr(QtWidgets.QFileDialog, "getOpenFileName", unexpected_dialog)
+    monkeypatch.setattr(dialogs, "choose_docs_path", unexpected_dialog)
+
+    window.new_chain()
+    assert not window.open_chain()
+    window.select_docs_file()
+
+    assert confirmation_count == 3
+    assert window.production_chain is gui_scenario.chain
+
+
+def test_new_chain_continues_when_dirty_changes_are_discarded(
+    qtbot: QtBot,
+    gui_scenario: GuiScenario,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    window = make_window(qtbot, gui_scenario, chain=gui_scenario.chain)
+    window.has_unsaved_changes = True
+
+    def discard_changes(*_args: object, **_kwargs: object) -> object:
+        return QtWidgets.QMessageBox.StandardButton.Discard
+
+    def choose_new_goal(*_args: object, **_kwargs: object) -> ic.Item:
+        return gui_scenario.ingot
+
+    def skip_goal_recipe(
+        _window: MainWindow,
+        amount_per_min: fr.Fraction | None = None,
+    ) -> None:
+        del amount_per_min
+
+    monkeypatch.setattr(QtWidgets.QMessageBox, "question", discard_changes)
+    monkeypatch.setattr(dialogs, "choose_goal_item", choose_new_goal)
+    monkeypatch.setattr(MainWindow, "add_goal_recipe", skip_goal_recipe)
+
+    window.new_chain()
+
+    assert window.production_chain is not None
+    assert window.production_chain.goal is gui_scenario.ingot
+    assert not window.production_chain.recipes
+
+
+def test_window_close_prompts_only_for_dirty_work(
+    qtbot: QtBot,
+    gui_scenario: GuiScenario,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    window = make_window(qtbot, gui_scenario, chain=gui_scenario.chain)
+    answers = iter(
+        [
+            QtWidgets.QMessageBox.StandardButton.Cancel,
+            QtWidgets.QMessageBox.StandardButton.Discard,
+        ]
+    )
+    prompt_count = 0
+
+    def answer_question(*_args: object, **_kwargs: object) -> object:
+        nonlocal prompt_count
+        prompt_count += 1
+        return next(answers)
+
+    monkeypatch.setattr(QtWidgets.QMessageBox, "question", answer_question)
+
+    clean_event = QtGui.QCloseEvent()
+    window.closeEvent(clean_event)
+    assert clean_event.isAccepted()
+    assert prompt_count == 0
+
+    window.has_unsaved_changes = True
+    cancelled_event = QtGui.QCloseEvent()
+    window.closeEvent(cancelled_event)
+    assert not cancelled_event.isAccepted()
+
+    discarded_event = QtGui.QCloseEvent()
+    window.closeEvent(discarded_event)
+    assert discarded_event.isAccepted()
+    assert prompt_count == 2
+
+
+def test_save_failure_preserves_dirty_state_and_filename(
+    qtbot: QtBot,
+    gui_scenario: GuiScenario,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_filename = pathlib.Path("original.json")
+    window = make_window(
+        qtbot,
+        gui_scenario,
+        chain=gui_scenario.chain,
+        filename=original_filename,
+    )
+    window.has_unsaved_changes = True
+    errors: list[tuple[str, str]] = []
+
+    def fail_save(
+        _chain: pc.ProductionChain,
+        _filename: pathlib.Path,
+        scale: fr.Fraction,
+    ) -> None:
+        del scale
+        raise OSError("disk is full")
+
+    def record_error(
+        _parent: QtWidgets.QWidget,
+        title: str,
+        message: str,
+    ) -> object:
+        errors.append((title, message))
+        return QtWidgets.QMessageBox.StandardButton.Ok
+
+    monkeypatch.setattr(pc.ProductionChain, "save", fail_save)
+    monkeypatch.setattr(QtWidgets.QMessageBox, "critical", record_error)
+
+    window.save_chain()
+
+    assert window.filename == original_filename
+    assert window.has_unsaved_changes
+    assert errors == [("Save Failed", "disk is full")]
+
+
+def test_save_as_failure_does_not_replace_filename(
+    qtbot: QtBot,
+    gui_scenario: GuiScenario,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: pathlib.Path,
+) -> None:
+    original_filename = pathlib.Path("original.json")
+    window = make_window(
+        qtbot,
+        gui_scenario,
+        chain=gui_scenario.chain,
+        filename=original_filename,
+    )
+    window.has_unsaved_changes = True
+
+    def choose_filename(*_args: object, **_kwargs: object) -> tuple[str, str]:
+        return str(tmp_path / "new.json"), "Production Chain (*.json)"
+
+    def fail_save(
+        _chain: pc.ProductionChain,
+        _filename: pathlib.Path,
+        scale: fr.Fraction,
+    ) -> None:
+        del scale
+        raise OSError("permission denied")
+
+    def ignore_error(*_args: object, **_kwargs: object) -> object:
+        return QtWidgets.QMessageBox.StandardButton.Ok
+
+    monkeypatch.setattr(QtWidgets.QFileDialog, "getSaveFileName", choose_filename)
+    monkeypatch.setattr(pc.ProductionChain, "save", fail_save)
+    monkeypatch.setattr(QtWidgets.QMessageBox, "critical", ignore_error)
+
+    window.save_chain_as()
+
+    assert window.filename == original_filename
+    assert window.has_unsaved_changes
+
+
+def test_successful_save_as_updates_filename_and_clears_dirty_state(
+    qtbot: QtBot,
+    gui_scenario: GuiScenario,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: pathlib.Path,
+) -> None:
+    window = make_window(qtbot, gui_scenario, chain=gui_scenario.chain)
+    window.has_unsaved_changes = True
+    target = tmp_path / "saved-chain.json"
+
+    def choose_filename(*_args: object, **_kwargs: object) -> tuple[str, str]:
+        return str(target), "Production Chain (*.json)"
+
+    monkeypatch.setattr(QtWidgets.QFileDialog, "getSaveFileName", choose_filename)
+
+    window.save_chain_as()
+
+    assert target.exists()
+    assert window.filename == target
+    assert not window.has_unsaved_changes
+    assert window.status_label.text() == f"File: {target}"
 
 
 def test_scale_combo_reflects_current_game_data_scale(

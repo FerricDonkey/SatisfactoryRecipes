@@ -147,6 +147,7 @@ def test_net_items_table_renders_without_edit_signal_and_emits_exact_amount(
     assert name_item is not None
     assert amount_item is not None
     assert amount_item.text() == "1.667"
+    assert "Double-click" in amount_item.toolTip()
 
     amount_item.setText("7/3")
     table.itemDoubleClicked.emit(name_item)
@@ -183,6 +184,8 @@ def test_chain_details_tabs_renders_all_views_and_forwards_shortage_request(
     assert output_name is not None
     assert input_name.text() == ore.name
     assert output_name.text() == ingot.name
+    assert "add a recipe" in input_name.toolTip()
+    assert "Double-click" in tabs.tabToolTip(0)
     assert tabs.recipe_details.content_layout.count() == 2
 
     tabs.inputs_table.itemDoubleClicked.emit(input_name)

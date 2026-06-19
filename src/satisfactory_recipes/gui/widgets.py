@@ -222,13 +222,21 @@ class RecipesPanel(QtWidgets.QWidget):
 class NetItemsTable(QtWidgets.QTableWidget):
     """Reusable editable table of item rates."""
 
+    RATE_EDIT_HINT = "Double-click a Per Minute cell to edit the chain rate."
+
     amount_edit_requested = QtCore.Signal(object, object)
     item_activated = QtCore.Signal(object)
 
-    def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        activation_hint: str | None = None,
+        parent: QtWidgets.QWidget | None = None,
+    ) -> None:
         super().__init__(parent)
         self._rendering = False
         self._values: dict[ic.Item, fr.Fraction] = {}
+        self._activation_hint = activation_hint
 
         self.setColumnCount(2)
         self.setHorizontalHeaderLabels(["Item", "Per Minute"])
@@ -242,6 +250,13 @@ class NetItemsTable(QtWidgets.QTableWidget):
         header.setSectionResizeMode(
             1, QtWidgets.QHeaderView.ResizeMode.ResizeToContents
         )
+        rate_header = self.horizontalHeaderItem(1)
+        if rate_header is not None:
+            rate_header.setToolTip(self.RATE_EDIT_HINT)
+        table_hints = [self.RATE_EDIT_HINT]
+        if activation_hint is not None:
+            table_hints.append(activation_hint)
+        self.setToolTip(" ".join(table_hints))
 
         self.itemChanged.connect(self._handle_item_changed)
         self.itemDoubleClicked.connect(self._handle_item_double_clicked)
@@ -257,9 +272,12 @@ class NetItemsTable(QtWidgets.QTableWidget):
                     name_item.flags() & ~QtCore.Qt.ItemFlag.ItemIsEditable
                 )
                 name_item.setData(QtCore.Qt.ItemDataRole.UserRole, item)
+                if self._activation_hint is not None:
+                    name_item.setToolTip(self._activation_hint)
 
                 amount_item = QtWidgets.QTableWidgetItem(f"{amount:.3f}")
                 amount_item.setData(QtCore.Qt.ItemDataRole.UserRole, item)
+                amount_item.setToolTip(self.RATE_EDIT_HINT)
                 self.setItem(row, 0, name_item)
                 self.setItem(row, 1, amount_item)
         finally:
@@ -353,14 +371,20 @@ class ChainDetailsTabs(QtWidgets.QTabWidget):
     amount_edit_requested = QtCore.Signal(object, object)
     shortage_recipe_requested = QtCore.Signal(object)
 
+    SHORTAGE_RECIPE_HINT = (
+        "Double-click an input item to add a recipe for that shortage."
+    )
+
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
-        self.inputs_table = NetItemsTable()
+        self.inputs_table = NetItemsTable(activation_hint=self.SHORTAGE_RECIPE_HINT)
         self.outputs_table = NetItemsTable()
         self.recipe_details = RecipeDetailsView()
         self.addTab(self.inputs_table, "Inputs")
         self.addTab(self.outputs_table, "Outputs")
         self.addTab(self.recipe_details, "Recipe Details")
+        self.setTabToolTip(0, self.SHORTAGE_RECIPE_HINT)
+        self.setTabToolTip(1, NetItemsTable.RATE_EDIT_HINT)
 
         self.inputs_table.amount_edit_requested.connect(self.amount_edit_requested)
         self.outputs_table.amount_edit_requested.connect(self.amount_edit_requested)

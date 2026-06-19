@@ -180,6 +180,9 @@ class MainWindow(QtWidgets.QMainWindow):
             self.add_goal_recipe(amount_per_min=choice.amount_per_min)
 
     def new_chain(self) -> None:
+        if not self._confirm_discard_unsaved_changes("Creating a new chain"):
+            return
+
         goal = dialogs.choose_goal_item(game_data=self.game_data, parent=self)
         if goal is None:
             return
@@ -308,6 +311,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.refresh()
 
     def open_chain(self) -> bool:
+        if not self._confirm_discard_unsaved_changes("Opening another chain"):
+            return False
+
         filename_str, _selected_filter = QtWidgets.QFileDialog.getOpenFileName(
             self,
             "Open Production Chain",
@@ -332,13 +338,7 @@ class MainWindow(QtWidgets.QMainWindow):
         return True
 
     def select_docs_file(self) -> None:
-        if not self._confirm_clear_chain(
-            title="Select Game Data",
-            message=(
-                "Changing the game data file clears the current production "
-                "chain and goal item. Continue?"
-            ),
-        ):
+        if not self._confirm_discard_unsaved_changes("Changing the game data file"):
             return
 
         selection = dialogs.choose_docs_path(
@@ -381,9 +381,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.save_chain_as()
             return
 
-        self.production_chain.save(self.filename, scale=self.game_data.scale)
-        self.has_unsaved_changes = False
-        self.refresh()
+        self._save_chain_to(self.filename)
 
     def save_chain_as(self) -> None:
         if self.production_chain is None:
@@ -400,8 +398,23 @@ class MainWindow(QtWidgets.QMainWindow):
         if not filename_str:
             return
 
-        self.filename = pathlib.Path(filename_str)
-        self.save_chain()
+        self._save_chain_to(pathlib.Path(filename_str))
+
+    def _save_chain_to(self, filename: pathlib.Path) -> bool:
+        chain = self.production_chain
+        if chain is None:
+            return False
+
+        try:
+            chain.save(filename, scale=self.game_data.scale)
+        except Exception as exc:
+            QtWidgets.QMessageBox.critical(self, "Save Failed", str(exc))
+            return False
+
+        self.filename = filename
+        self.has_unsaved_changes = False
+        self.refresh()
+        return True
 
     def refresh(self) -> None:
         state = view_state.build_main_window_view_state(
@@ -520,6 +533,26 @@ class MainWindow(QtWidgets.QMainWindow):
             | QtWidgets.QMessageBox.StandardButton.No,
         )
         return result == QtWidgets.QMessageBox.StandardButton.Yes
+
+    def _confirm_discard_unsaved_changes(self, action: str) -> bool:
+        if not self.has_unsaved_changes:
+            return True
+
+        result = QtWidgets.QMessageBox.question(
+            self,
+            "Discard Unsaved Changes?",
+            f"{action} will discard unsaved changes. Continue?",
+            QtWidgets.QMessageBox.StandardButton.Discard
+            | QtWidgets.QMessageBox.StandardButton.Cancel,
+            QtWidgets.QMessageBox.StandardButton.Cancel,
+        )
+        return result == QtWidgets.QMessageBox.StandardButton.Discard
+
+    def closeEvent(self, event: QtGui.QCloseEvent) -> None:  # noqa: N802
+        if self._confirm_discard_unsaved_changes("Closing the window"):
+            event.accept()
+        else:
+            event.ignore()
 
     def _mark_unsaved(self) -> None:
         self.has_unsaved_changes = True
