@@ -6,6 +6,7 @@ import pathlib
 from PySide6 import QtGui, QtWidgets
 
 from satisfactory_recipes import config as sr_config
+from satisfactory_recipes import docs_parser
 from satisfactory_recipes import info_classes as ic
 from satisfactory_recipes import production_chain as pc
 from satisfactory_recipes.gui import appearance, dialogs, view_state, widgets
@@ -305,7 +306,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         filename = pathlib.Path(filename_str)
         try:
-            game_data = ic.GameData.from_json(self.docs_path)
+            game_data = docs_parser.load_game_data(self.docs_path)
             self.production_chain = pc.ProductionChain.load(filename, game_data)
             self.game_data = game_data
         except Exception as exc:
@@ -333,7 +334,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         scale = self.game_data.scale
         try:
-            game_data = ic.GameData.from_json(selection.docs_path)
+            game_data = docs_parser.load_game_data(selection.docs_path)
         except Exception as exc:
             QtWidgets.QMessageBox.critical(self, "Game Data Load Failed", str(exc))
             return
@@ -472,7 +473,7 @@ class MainWindow(QtWidgets.QMainWindow):
             else None
         )
 
-        game_data = ic.GameData.from_json(self.docs_path)
+        game_data = docs_parser.load_game_data(self.docs_path)
         if scale != 1:
             game_data.scale_recipes(scale)
 

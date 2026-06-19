@@ -1,4 +1,3 @@
-import dataclasses
 import fractions as fr
 
 from PySide6 import QtWidgets
@@ -21,17 +20,17 @@ def make_widget_scenario() -> tuple[
     ingot = support.make_fake_item("Iron Ingot")
     smelter = ic.Building(
         class_name="Build_Smelter_C",
+        source_native_class="test.fixed_manufacturer",
         name="Smelter",
-        category="manufacturing",
+        kind=ic.BuildingKind.MANUFACTURER,
+        power_mode=ic.BuildingPowerMode.CONSTANT,
         power_draw=fr.Fraction(4),
     )
-    recipe = dataclasses.replace(
-        support.make_fake_recipe(
-            class_name="Recipe_Ingot_C",
-            name="Iron Ingot",
-            inputs={ore: fr.Fraction(2)},
-            products={ingot: fr.Fraction(1)},
-        ),
+    recipe = support.make_fake_recipe(
+        class_name="Recipe_Ingot_C",
+        name="Iron Ingot",
+        inputs={ore: fr.Fraction(2)},
+        products={ingot: fr.Fraction(1)},
         produced_in=smelter,
     )
     chain = pc.ProductionChain(

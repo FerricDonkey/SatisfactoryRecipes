@@ -1,4 +1,3 @@
-import dataclasses
 import fractions as fr
 
 import pytest
@@ -47,17 +46,17 @@ def test_recipe_search_updates_preview_and_returns_selection(
     ingot = support.make_fake_item("Iron Ingot")
     smelter = ic.Building(
         class_name="Build_Smelter_C",
+        source_native_class="test.fixed_manufacturer",
         name="Smelter",
-        category="manufacturing",
+        kind=ic.BuildingKind.MANUFACTURER,
+        power_mode=ic.BuildingPowerMode.CONSTANT,
         power_draw=fr.Fraction(4),
     )
-    recipe = dataclasses.replace(
-        support.make_fake_recipe(
-            class_name="Recipe_Ingot_C",
-            name="Iron Ingot",
-            inputs={ore: fr.Fraction(1)},
-            products={ingot: fr.Fraction(1)},
-        ),
+    recipe = support.make_fake_recipe(
+        class_name="Recipe_Ingot_C",
+        name="Iron Ingot",
+        inputs={ore: fr.Fraction(1)},
+        products={ingot: fr.Fraction(1)},
         produced_in=smelter,
     )
     dialog = dialogs.RecipeSearchDialog(

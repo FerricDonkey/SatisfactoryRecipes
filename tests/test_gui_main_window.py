@@ -34,27 +34,25 @@ def gui_scenario() -> GuiScenario:
     plate = support.make_fake_item("Iron Plate")
     constructor = ic.Building(
         class_name="Build_Constructor_C",
+        source_native_class="test.fixed_manufacturer",
         name="Constructor",
-        category="manufacturing",
+        kind=ic.BuildingKind.MANUFACTURER,
+        power_mode=ic.BuildingPowerMode.CONSTANT,
         power_draw=fr.Fraction(4),
     )
 
-    ingot_recipe = dataclasses.replace(
-        support.make_fake_recipe(
-            class_name="Recipe_Ingot_C",
-            name="Iron Ingot",
-            inputs={ore: fr.Fraction(2)},
-            products={ingot: fr.Fraction(1)},
-        ),
+    ingot_recipe = support.make_fake_recipe(
+        class_name="Recipe_Ingot_C",
+        name="Iron Ingot",
+        inputs={ore: fr.Fraction(2)},
+        products={ingot: fr.Fraction(1)},
         produced_in=constructor,
     )
-    plate_recipe = dataclasses.replace(
-        support.make_fake_recipe(
-            class_name="Recipe_Plate_C",
-            name="Iron Plate",
-            inputs={ingot: fr.Fraction(2)},
-            products={plate: fr.Fraction(1)},
-        ),
+    plate_recipe = support.make_fake_recipe(
+        class_name="Recipe_Plate_C",
+        name="Iron Plate",
+        inputs={ingot: fr.Fraction(2)},
+        products={plate: fr.Fraction(1)},
         produced_in=constructor,
     )
     game_data = support.make_fake_game_data(

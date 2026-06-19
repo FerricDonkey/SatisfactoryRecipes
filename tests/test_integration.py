@@ -4,6 +4,7 @@ import fractions as fr
 import pytest
 
 from satisfactory_recipes import config as sr_config
+from satisfactory_recipes import docs_parser
 from satisfactory_recipes import info_classes as ic
 from satisfactory_recipes import production_chain as pc
 
@@ -28,7 +29,7 @@ def test_production_chain_no_crash() -> None:
     if docs_path is None:
         pytest.skip("Satisfactory docs file not found")
 
-    game_data = ic.GameData.from_json(docs_path)
+    game_data = docs_parser.load_game_data(docs_path)
     # raise ValueError(f"{game_data.producible_item_name_d}")
     goal_item = game_data.producible_item_name_d["Plutonium Fuel Rod"]
     production_chain = pc.ProductionChain(goal=goal_item)

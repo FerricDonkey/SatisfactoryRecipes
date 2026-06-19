@@ -1,4 +1,3 @@
-import dataclasses
 import fractions as fr
 
 from satisfactory_recipes import info_classes as ic
@@ -11,17 +10,17 @@ def test_recipe_html_escapes_domain_names() -> None:
     output_item = support.make_fake_item("Ingot & Plate")
     building = ic.Building(
         class_name="Build_Test_C",
+        source_native_class="test.fixed_manufacturer",
         name="Maker > Constructor",
-        category="manufacturing",
+        kind=ic.BuildingKind.MANUFACTURER,
+        power_mode=ic.BuildingPowerMode.CONSTANT,
         power_draw=fr.Fraction(4),
     )
-    recipe = dataclasses.replace(
-        support.make_fake_recipe(
-            class_name="Recipe_Test_C",
-            name="Make <This> & That",
-            inputs={input_item: fr.Fraction(1)},
-            products={output_item: fr.Fraction(1)},
-        ),
+    recipe = support.make_fake_recipe(
+        class_name="Recipe_Test_C",
+        name="Make <This> & That",
+        inputs={input_item: fr.Fraction(1)},
+        products={output_item: fr.Fraction(1)},
         produced_in=building,
     )
 

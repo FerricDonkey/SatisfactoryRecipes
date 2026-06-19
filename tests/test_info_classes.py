@@ -4,8 +4,9 @@ import pathlib
 
 import pytest
 
-from satisfactory_recipes import info_classes as ic
 from satisfactory_recipes import config as sr_config
+from satisfactory_recipes import docs_parser
+from satisfactory_recipes import info_classes as ic
 from tests import support
 
 
@@ -15,7 +16,7 @@ def test_get_recipes_producing() -> None:
     if docs_path is None:
         pytest.skip("Satisfactory docs file not found")
 
-    game_data = ic.GameData.from_json(docs_path)
+    game_data = docs_parser.load_game_data(docs_path)
     for item in game_data.producible_items:
         for recipe in game_data.get_recipes_producing(item):
             assert item in recipe.products
@@ -159,6 +160,10 @@ def test_game_data_reports_recipes_skipped_for_missing_items(
         "/Script/CoreUObject.Class'/Script/FactoryGame.FGItemDescriptor'"
     )
     recipe_native_class = "/Script/CoreUObject.Class'/Script/FactoryGame.FGRecipe'"
+    building_native_class = (
+        "/Script/CoreUObject.Class'/Script/FactoryGame.FGBuildableManufacturer'"
+    )
+    building_class = "Build_Test_C"
     known_item_class = "Desc_Known_C"
     missing_item_class = "Desc_Missing_C"
 
@@ -170,8 +175,10 @@ def test_game_data_reports_recipes_skipped_for_missing_items(
             "mProduct": (
                 f'((ItemClass="/Game/Test/{product_class}.{product_class}",Amount=1))'
             ),
-            "mProducedIn": "()",
+            "mProducedIn": (f'("/Game/Test/{building_class}.{building_class}")'),
             "mManufactoringDuration": "1",
+            "mVariablePowerConsumptionConstant": "0",
+            "mVariablePowerConsumptionFactor": "1",
         }
 
     docs = [
@@ -187,6 +194,16 @@ def test_game_data_reports_recipes_skipped_for_missing_items(
             ],
         },
         {
+            "NativeClass": building_native_class,
+            "Classes": [
+                {
+                    "ClassName": building_class,
+                    "mDisplayName": "Test Builder",
+                    "mPowerConsumption": "4",
+                }
+            ],
+        },
+        {
             "NativeClass": recipe_native_class,
             "Classes": [
                 recipe_source("Recipe_Loaded_C", known_item_class),
@@ -197,14 +214,19 @@ def test_game_data_reports_recipes_skipped_for_missing_items(
     docs_path = tmp_path / "en-us.json"
     docs_path.write_text(json.dumps(docs))
 
-    game_data = ic.GameData.from_json(docs_path)
+    parse_result = docs_parser.parse_game_data(docs_path)
+    game_data = parse_result.game_data
 
     assert set(game_data.recipes_d) == {"Recipe_Loaded_C"}
-    assert game_data.parse_report == ic.ParseReport(
+    assert parse_result.report == docs_parser.ParseReport(
         raw_recipe_count=2,
+        automated_recipe_count=2,
         loaded_recipe_count=1,
+        ignored_recipe_count=0,
         skipped_recipe_count=1,
         missing_item_classes_by_recipe={
             "Recipe_Skipped_C": frozenset({missing_item_class})
         },
+        fixed_power_recipes_with_nondefault_parameters={},
+        recipe_power_recipes_with_default_parameters=frozenset(),
     )

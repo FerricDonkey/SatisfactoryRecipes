@@ -7,7 +7,7 @@ import sys
 from PySide6 import QtCore, QtWidgets
 
 from satisfactory_recipes import config as sr_config
-from satisfactory_recipes import info_classes as ic
+from satisfactory_recipes import docs_parser
 from satisfactory_recipes import production_chain as pc
 from satisfactory_recipes.gui import dialogs
 from satisfactory_recipes.gui import main_window
@@ -80,7 +80,7 @@ def main(
         return 1
 
     docs_path, user_config = docs_resolution
-    game_data = ic.GameData.from_json(docs_path)
+    game_data = docs_parser.load_game_data(docs_path)
     production_chain = None
     if filename is not None:
         production_chain = pc.ProductionChain.load(filename, game_data)

@@ -7,7 +7,7 @@ import sys
 import typing as ty
 
 from satisfactory_recipes import config as sr_config
-from satisfactory_recipes import info_classes as ic
+from satisfactory_recipes import docs_parser
 from satisfactory_recipes import interactive_mode as im
 
 
@@ -122,7 +122,7 @@ def resolve_docs_path(args: argparse.Namespace) -> pathlib.Path:
 def run_cli(args: argparse.Namespace) -> None:
     docs_path = resolve_docs_path(args)
 
-    game_data = ic.GameData.from_json(docs_path)
+    game_data = docs_parser.load_game_data(docs_path)
     scale = getattr(args, "scale", fr.Fraction(1, 1))
     if scale != 1:
         game_data.scale_recipes(scale)

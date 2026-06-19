@@ -9,14 +9,16 @@ from satisfactory_recipes import stupid_classes as sc
 def make_fake_item(
     name: str,
     matter_state: ic.MatterState = ic.MatterState.SOLID,
+    kind: ic.ItemKind = ic.ItemKind.RESOURCE,
 ) -> ic.Item:
     return ic.Item(
         class_name=name,
+        source_native_class="test.item",
         name=name,
+        kind=kind,
         matter_state=matter_state,
         stack_size=1,
         resource_sink_points=1,
-        is_resource=True,
     )
 
 
@@ -27,6 +29,8 @@ def make_fake_recipe(
     inputs: dict[ic.Item, fr.Fraction],
     products: dict[ic.Item, fr.Fraction] | None = None,
     craft_time: fr.Fraction = fr.Fraction(60),
+    produced_in: ic.Building | None = None,
+    variable_power: ic.VariablePowerParameters | None = None,
 ) -> ic.Recipe:
     if products is None:
         products = {}
@@ -34,8 +38,21 @@ def make_fake_recipe(
     if name is None:
         name = class_name
 
+    if produced_in is None:
+        power_profile = ic.PowerProfile.none()
+    elif produced_in.power_mode is ic.BuildingPowerMode.CONSTANT:
+        power_profile = ic.PowerProfile.from_building(produced_in.power_draw)
+    else:
+        if variable_power is None:
+            variable_power = ic.VariablePowerParameters(
+                constant=fr.Fraction(0),
+                factor=fr.Fraction(0),
+            )
+        power_profile = ic.PowerProfile.from_recipe(variable_power)
+
     return ic.Recipe(
         class_name=class_name,
+        source_native_class="test.recipe",
         name=name,
         inputs=sc.ScalableCounter[ic.Item](inputs, frozen=True),
         inputs_per_min=sc.ScalableCounter[ic.Item](
@@ -53,9 +70,9 @@ def make_fake_recipe(
             },
             frozen=True,
         ),
-        produced_in=None,
+        produced_in=produced_in,
         craft_time=craft_time,
-        _variable_part_mean_power_draw=fr.Fraction(0),
+        power_profile=power_profile,
     )
 
 

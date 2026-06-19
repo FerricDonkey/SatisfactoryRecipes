@@ -1,4 +1,3 @@
-import dataclasses
 import fractions as fr
 import pathlib
 
@@ -7,6 +6,7 @@ from PySide6 import QtWidgets
 import pytestqt.qtbot
 
 from satisfactory_recipes import config as sr_config
+from satisfactory_recipes import docs_parser
 from satisfactory_recipes import info_classes as ic
 from satisfactory_recipes import interactive_mode as im
 from satisfactory_recipes.gui import dialogs
@@ -24,26 +24,24 @@ def test_create_scale_save_and_reopen_complete_chain(
     plate = support.make_fake_item("Iron Plate")
     constructor = ic.Building(
         class_name="Build_Constructor_C",
+        source_native_class="test.fixed_manufacturer",
         name="Constructor",
-        category="manufacturing",
+        kind=ic.BuildingKind.MANUFACTURER,
+        power_mode=ic.BuildingPowerMode.CONSTANT,
         power_draw=fr.Fraction(4),
     )
-    ingot_recipe = dataclasses.replace(
-        support.make_fake_recipe(
-            class_name="Recipe_Ingot_C",
-            name="Iron Ingot",
-            inputs={ore: fr.Fraction(2)},
-            products={ingot: fr.Fraction(1)},
-        ),
+    ingot_recipe = support.make_fake_recipe(
+        class_name="Recipe_Ingot_C",
+        name="Iron Ingot",
+        inputs={ore: fr.Fraction(2)},
+        products={ingot: fr.Fraction(1)},
         produced_in=constructor,
     )
-    plate_recipe = dataclasses.replace(
-        support.make_fake_recipe(
-            class_name="Recipe_Plate_C",
-            name="Iron Plate",
-            inputs={ingot: fr.Fraction(2)},
-            products={plate: fr.Fraction(1)},
-        ),
+    plate_recipe = support.make_fake_recipe(
+        class_name="Recipe_Plate_C",
+        name="Iron Plate",
+        inputs={ingot: fr.Fraction(2)},
+        products={plate: fr.Fraction(1)},
         produced_in=constructor,
     )
 
@@ -127,18 +125,11 @@ def test_create_scale_save_and_reopen_complete_chain(
     def choose_open_path(*_args: object, **_kwargs: object) -> tuple[str, str]:
         return str(save_path), "Production Chain (*.json)"
 
-    def load_fresh_game_data(
-        _game_data_type: type[ic.GameData],
-        _docs_path: pathlib.Path,
-    ) -> ic.GameData:
+    def load_fresh_game_data(_docs_path: pathlib.Path) -> ic.GameData:
         return fresh_game_data()
 
     monkeypatch.setattr(QtWidgets.QFileDialog, "getOpenFileName", choose_open_path)
-    monkeypatch.setattr(
-        ic.GameData,
-        "from_json",
-        classmethod(load_fresh_game_data),
-    )
+    monkeypatch.setattr(docs_parser, "load_game_data", load_fresh_game_data)
 
     assert window.open_chain()
     assert window.production_chain is not None
