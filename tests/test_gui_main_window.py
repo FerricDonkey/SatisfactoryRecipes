@@ -63,9 +63,11 @@ def gui_scenario() -> GuiScenario:
     )
     chain = pc.ProductionChain(
         goal=plate,
-        recipes=sc.ScalableCounter[ic.Recipe]({
-            plate_recipe: fr.Fraction(3),
-        }),
+        recipes=sc.ScalableCounter[ic.Recipe](
+            {
+                plate_recipe: fr.Fraction(3),
+            }
+        ),
     )
     return GuiScenario(
         ore=ore,
@@ -167,6 +169,34 @@ def test_recipe_actions_follow_available_shortages(
 
     assert not window.add_shortage_recipe_action.isEnabled()
     assert not window.add_shortage_recipe_button.isEnabled()
+
+
+def test_refresh_computes_chain_view_state_once(
+    qtbot: QtBot,
+    gui_scenario: GuiScenario,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_get_net_per_min = pc.ProductionChain.get_net_per_min
+    net_calculations = 0
+
+    def count_net_calculation(
+        chain: pc.ProductionChain,
+    ) -> sc.ScalableCounter[ic.Item]:
+        nonlocal net_calculations
+        net_calculations += 1
+        return original_get_net_per_min(chain)
+
+    monkeypatch.setattr(
+        pc.ProductionChain,
+        "get_net_per_min",
+        count_net_calculation,
+    )
+
+    window = make_window(qtbot, gui_scenario, chain=gui_scenario.chain)
+    assert net_calculations == 1
+
+    window.refresh()
+    assert net_calculations == 2
 
 
 def test_remove_recipe_button_updates_chain_and_dirty_state(

@@ -59,8 +59,7 @@ def test_goal_header_displays_state_and_emits_user_intent(qtbot: QtBot) -> None:
     header.scale_changed.connect(record_scale)
     header.change_goal_requested.connect(record_goal_request)
 
-    header.set_goal(ingot)
-    header.set_recipe_scale(fr.Fraction(1, 2))
+    header.set_view(goal=ingot, recipe_scale=fr.Fraction(1, 2))
 
     assert header.goal_label.text() == "Goal: Iron Ingot"
     assert header.scale_combo.currentData() == fr.Fraction(1, 2)
@@ -96,8 +95,11 @@ def test_recipes_panel_renders_and_emits_recipe_actions(qtbot: QtBot) -> None:
     panel.remove_recipe_requested.connect(record_removal)
     panel.add_goal_recipe_requested.connect(record_goal_request)
     panel.add_shortage_recipe_requested.connect(record_shortage_request)
-    panel.set_chain(chain)
-    panel.set_actions_enabled(has_chain=True, has_producible_shortages=True)
+    panel.set_view(
+        recipes=tuple(chain.recipes.items()),
+        can_add_goal_recipe=True,
+        can_add_shortage_recipe=True,
+    )
 
     assert panel.table.rowCount() == 1
     assert panel.table.item(0, 1).text() == "Iron Ingot"  # type: ignore[union-attr]
@@ -137,7 +139,7 @@ def test_net_items_table_renders_without_edit_signal_and_emits_exact_amount(
 
     table.amount_edit_requested.connect(record_edit)
     table.item_activated.connect(record_activation)
-    table.set_values({ore: fr.Fraction(5, 3)})
+    table.set_view(((ore, fr.Fraction(5, 3)),))
 
     assert edits == []
     name_item = table.item(0, 0)
@@ -166,7 +168,12 @@ def test_chain_details_tabs_renders_all_views_and_forwards_shortage_request(
         shortages.append(item_value)
 
     tabs.shortage_recipe_requested.connect(record_shortage)
-    tabs.set_chain(chain)
+    net = chain.get_net_per_min()
+    tabs.set_view(
+        inputs=tuple((item, -amount) for item, amount in net.items() if amount < 0),
+        outputs=tuple((item, amount) for item, amount in net.items() if amount > 0),
+        recipes=tuple(chain.recipes.items()),
+    )
 
     assert tabs.inputs_table.rowCount() == 1
     assert tabs.outputs_table.rowCount() == 1

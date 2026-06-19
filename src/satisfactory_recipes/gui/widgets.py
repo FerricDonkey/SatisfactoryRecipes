@@ -7,8 +7,10 @@ import functools
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from satisfactory_recipes import info_classes as ic
-from satisfactory_recipes import production_chain as pc
 from satisfactory_recipes.gui import recipe_format
+
+type ItemRates = cabc.Sequence[tuple[ic.Item, fr.Fraction]]
+type RecipeCounts = cabc.Sequence[tuple[ic.Recipe, fr.Fraction]]
 
 
 class GoalHeader(QtWidgets.QWidget):
@@ -49,13 +51,14 @@ class GoalHeader(QtWidgets.QWidget):
         self.change_goal_button.clicked.connect(self.change_goal_requested)
         self.scale_combo.currentIndexChanged.connect(self._emit_selected_scale)
 
-    def set_goal(self, goal: ic.Item | None) -> None:
+    def set_view(self, *, goal: ic.Item | None, recipe_scale: fr.Fraction) -> None:
         if goal is None:
             self.goal_label.setText("No production chain loaded")
         else:
             self.goal_label.setText(f"Goal: {goal.name}")
+        self._set_recipe_scale(recipe_scale)
 
-    def set_recipe_scale(self, scale: fr.Fraction) -> None:
+    def _set_recipe_scale(self, scale: fr.Fraction) -> None:
         blocker = QtCore.QSignalBlocker(self.scale_combo)
         try:
             for index, option in enumerate(self.SCALE_OPTIONS):
@@ -95,13 +98,15 @@ class RecipesPanel(QtWidgets.QWidget):
         )
         self.table = QtWidgets.QTableWidget()
         self.table.setColumnCount(5)
-        self.table.setHorizontalHeaderLabels([
-            "",
-            "Recipe",
-            "Count",
-            "Building",
-            "Mean Power",
-        ])
+        self.table.setHorizontalHeaderLabels(
+            [
+                "",
+                "Recipe",
+                "Count",
+                "Building",
+                "Mean Power",
+            ]
+        )
         self.table.setEditTriggers(
             QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers
         )
@@ -136,12 +141,14 @@ class RecipesPanel(QtWidgets.QWidget):
             self.add_shortage_recipe_requested
         )
 
-    def set_chain(self, chain: pc.ProductionChain | None) -> None:
+    def set_view(
+        self,
+        *,
+        recipes: RecipeCounts,
+        can_add_goal_recipe: bool,
+        can_add_shortage_recipe: bool,
+    ) -> None:
         self.table.setRowCount(0)
-        if chain is None:
-            return
-
-        recipes = sorted(chain.recipes.items(), key=lambda pair: pair[0].name.lower())
         self.table.setRowCount(len(recipes))
         for row, (recipe, count) in enumerate(recipes):
             self.table.setCellWidget(row, 0, self._make_remove_button(recipe))
@@ -156,25 +163,17 @@ class RecipesPanel(QtWidgets.QWidget):
                 self.table.setItem(row, column, QtWidgets.QTableWidgetItem(value))
 
         self.table.resizeRowsToContents()
+        self.add_goal_recipe_button.setEnabled(can_add_goal_recipe)
+        self.add_shortage_recipe_button.setEnabled(can_add_shortage_recipe)
 
-    def set_actions_enabled(
-        self,
-        *,
-        has_chain: bool,
-        has_producible_shortages: bool,
-    ) -> None:
-        self.add_goal_recipe_button.setEnabled(has_chain)
-        self.add_shortage_recipe_button.setEnabled(
-            has_chain and has_producible_shortages
-        )
-
-    def refresh_remove_icons(self) -> None:
-        """Repaint palette-dependent remove icons after appearance changes."""
+    def refresh_appearance(self) -> None:
+        """Refresh palette-dependent icons and font-dependent row sizes."""
         for row in range(self.table.rowCount()):
             wrapper = self.table.cellWidget(row, 0)
             button = wrapper.findChild(QtWidgets.QToolButton)
             if button is not None:
                 button.setIcon(self._make_remove_icon())
+        self.table.resizeRowsToContents()
 
     def _make_remove_button(self, recipe: ic.Recipe) -> QtWidgets.QWidget:
         remove_button = QtWidgets.QToolButton()
@@ -247,13 +246,12 @@ class NetItemsTable(QtWidgets.QTableWidget):
         self.itemChanged.connect(self._handle_item_changed)
         self.itemDoubleClicked.connect(self._handle_item_double_clicked)
 
-    def set_values(self, values: cabc.Mapping[ic.Item, fr.Fraction]) -> None:
+    def set_view(self, values: ItemRates) -> None:
         self._values = dict(values)
         self._rendering = True
         try:
-            items = sorted(values.items(), key=lambda pair: pair[0].name.lower())
-            self.setRowCount(len(items))
-            for row, (item, amount) in enumerate(items):
+            self.setRowCount(len(values))
+            for row, (item, amount) in enumerate(values):
                 name_item = QtWidgets.QTableWidgetItem(item.name)
                 name_item.setFlags(
                     name_item.flags() & ~QtCore.Qt.ItemFlag.ItemIsEditable
@@ -285,7 +283,7 @@ class NetItemsTable(QtWidgets.QTableWidget):
                 "Invalid Amount",
                 "Enter a positive number or fraction.",
             )
-            self.set_values(self._values)
+            self.set_view(tuple(self._values.items()))
             return
 
         self.amount_edit_requested.emit(item, amount)
@@ -315,14 +313,10 @@ class RecipeDetailsView(QtWidgets.QScrollArea):
             QtWidgets.QSizePolicy.Policy.Expanding,
         )
 
-    def set_chain(self, chain: pc.ProductionChain | None) -> None:
+    def set_view(self, recipes: RecipeCounts) -> None:
         self.clear()
-        if chain is not None:
-            recipes = sorted(
-                chain.recipes.items(), key=lambda pair: pair[0].name.lower()
-            )
-            for recipe, count in recipes:
-                self.content_layout.addWidget(self._make_card(recipe, count))
+        for recipe, count in recipes:
+            self.content_layout.addWidget(self._make_card(recipe, count))
         self.content_layout.addStretch()
 
     def clear(self) -> None:
@@ -368,22 +362,21 @@ class ChainDetailsTabs(QtWidgets.QTabWidget):
         self.addTab(self.outputs_table, "Outputs")
         self.addTab(self.recipe_details, "Recipe Details")
 
-        self.inputs_table.amount_edit_requested.connect(
-            self.amount_edit_requested
-        )
-        self.outputs_table.amount_edit_requested.connect(
-            self.amount_edit_requested
-        )
+        self.inputs_table.amount_edit_requested.connect(self.amount_edit_requested)
+        self.outputs_table.amount_edit_requested.connect(self.amount_edit_requested)
         self.inputs_table.item_activated.connect(self.shortage_recipe_requested)
 
-    def set_chain(self, chain: pc.ProductionChain | None) -> None:
-        if chain is None:
-            self.inputs_table.set_values({})
-            self.outputs_table.set_values({})
-        else:
-            net = chain.get_net_per_min()
-            inputs = {item: -amount for item, amount in net.items() if amount < 0}
-            outputs = {item: amount for item, amount in net.items() if amount > 0}
-            self.inputs_table.set_values(inputs)
-            self.outputs_table.set_values(outputs)
-        self.recipe_details.set_chain(chain)
+    def set_view(
+        self,
+        *,
+        inputs: ItemRates,
+        outputs: ItemRates,
+        recipes: RecipeCounts,
+    ) -> None:
+        self.inputs_table.set_view(inputs)
+        self.outputs_table.set_view(outputs)
+        self.recipe_details.set_view(recipes)
+
+    def refresh_appearance(self) -> None:
+        self.inputs_table.resizeRowsToContents()
+        self.outputs_table.resizeRowsToContents()

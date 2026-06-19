@@ -8,7 +8,7 @@ from PySide6 import QtGui, QtWidgets
 from satisfactory_recipes import config as sr_config
 from satisfactory_recipes import info_classes as ic
 from satisfactory_recipes import production_chain as pc
-from satisfactory_recipes.gui import appearance, dialogs, widgets
+from satisfactory_recipes.gui import appearance, dialogs, view_state, widgets
 
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -51,9 +51,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.scale_combo = self.goal_header.scale_combo
         self.recipes_table = self.recipes_panel.table
         self.add_goal_recipe_button = self.recipes_panel.add_goal_recipe_button
-        self.add_shortage_recipe_button = (
-            self.recipes_panel.add_shortage_recipe_button
-        )
+        self.add_shortage_recipe_button = self.recipes_panel.add_shortage_recipe_button
         self.inputs_table = self.chain_details.inputs_table
         self.outputs_table = self.chain_details.outputs_table
         self.recipe_details_scroll = self.chain_details.recipe_details
@@ -63,7 +61,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self._setup_actions()
         self._setup_theme_actions()
         self._setup_layout()
-        self._sync_scale_combo()
         self.appearance_manager.apply_saved_preferences()
         self.refresh()
 
@@ -138,9 +135,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.chain_details.amount_edit_requested.connect(
             self._handle_net_amount_changed
         )
-        self.chain_details.shortage_recipe_requested.connect(
-            self.add_shortage_recipe
-        )
+        self.chain_details.shortage_recipe_requested.connect(self.add_shortage_recipe)
         self.appearance_manager.appearance_changed.connect(
             self._handle_appearance_changed
         )
@@ -333,7 +328,6 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.filename = filename
         self.has_unsaved_changes = False
-        self._sync_scale_combo()
         self.refresh()
         return True
 
@@ -375,7 +369,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.user_config.docs_path = selection.docs_path
         self.user_config.game_path = selection.game_path
         self._save_user_config()
-        self._sync_scale_combo()
         self.refresh()
 
     def save_chain(self) -> None:
@@ -411,27 +404,29 @@ class MainWindow(QtWidgets.QMainWindow):
         self.save_chain()
 
     def refresh(self) -> None:
-        self._refresh_impl()
-
-    def _refresh_impl(self) -> None:
-        chain = self.production_chain
-        if chain is None:
-            self.goal_header.set_goal(None)
-            self.status_label.setText(
-                "Choose Set Goal or File > New to select a goal item."
-            )
-            self.recipes_panel.set_chain(None)
-            self.chain_details.set_chain(None)
-            self._update_recipe_actions()
-            return
-
-        self.goal_header.set_goal(chain.goal)
-        filename = self.filename if self.filename is not None else "Unsaved"
-        self.status_label.setText(f"File: {filename}{self._unsaved_marker()}")
-        self.recipes_panel.set_chain(chain)
-        self.chain_details.set_chain(chain)
-        self._update_recipe_actions()
-        self._resize_table_rows()
+        state = view_state.build_main_window_view_state(
+            chain=self.production_chain,
+            game_data=self.game_data,
+            filename=self.filename,
+            has_unsaved_changes=self.has_unsaved_changes,
+        )
+        self.goal_header.set_view(
+            goal=state.goal,
+            recipe_scale=state.recipe_scale,
+        )
+        self.status_label.setText(state.status_text)
+        self.recipes_panel.set_view(
+            recipes=state.recipes,
+            can_add_goal_recipe=state.can_add_goal_recipe,
+            can_add_shortage_recipe=state.can_add_shortage_recipe,
+        )
+        self.chain_details.set_view(
+            inputs=state.inputs,
+            outputs=state.outputs,
+            recipes=state.recipes,
+        )
+        self.add_goal_recipe_action.setEnabled(state.can_add_goal_recipe)
+        self.add_shortage_recipe_action.setEnabled(state.can_add_shortage_recipe)
 
     def _handle_net_amount_changed(
         self,
@@ -465,7 +460,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 | QtWidgets.QMessageBox.StandardButton.No,
             )
             if result != QtWidgets.QMessageBox.StandardButton.Yes:
-                self._sync_scale_combo()
+                self.refresh()
                 return
 
         self._set_recipe_scale(scale)
@@ -480,8 +475,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.appearance_manager.reset_zoom()
 
     def _handle_appearance_changed(self) -> None:
-        self.recipes_panel.refresh_remove_icons()
-        self._resize_table_rows()
+        self.recipes_panel.refresh_appearance()
+        self.chain_details.refresh_appearance()
 
     def _save_user_config(self) -> None:
         sr_config.save_config(self.user_config)
@@ -505,7 +500,6 @@ class MainWindow(QtWidgets.QMainWindow):
             self.filename = None
             self._mark_unsaved()
 
-        self._sync_scale_combo()
         self.refresh()
 
     def _set_goal_and_clear_recipes(self, goal: ic.Item) -> None:
@@ -529,35 +523,3 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _mark_unsaved(self) -> None:
         self.has_unsaved_changes = True
-
-    def _unsaved_marker(self) -> str:
-        if self.has_unsaved_changes:
-            return " *"
-        return ""
-
-
-    def _sync_scale_combo(self) -> None:
-        self.goal_header.set_recipe_scale(self.game_data.scale)
-
-    def _update_recipe_actions(self) -> None:
-        has_chain = self.production_chain is not None
-        has_producible_shortages = False
-        if self.production_chain is not None:
-            has_producible_shortages = any(
-                item in self.game_data.producible_items
-                for item in self.production_chain.get_shortage_items()
-            )
-
-        self.add_goal_recipe_action.setEnabled(has_chain)
-        self.add_shortage_recipe_action.setEnabled(
-            has_chain and has_producible_shortages
-        )
-        self.recipes_panel.set_actions_enabled(
-            has_chain=has_chain,
-            has_producible_shortages=has_producible_shortages,
-        )
-        self.change_goal_button.setEnabled(True)
-
-    def _resize_table_rows(self) -> None:
-        for table in (self.recipes_table, self.inputs_table, self.outputs_table):
-            table.resizeRowsToContents()
