@@ -11,6 +11,8 @@ It will track how many machines (not accounting for over/under clocking) you nee
 
 The app works with the `en-us.json` documentation file installed with Satisfactory. It does not include or redistribute game data. It will attempt to locate this file automatically, but if it fails it will prompt you to point you at the location where you have installed the game or placed your copy of the file.
 
+**NOTE:** This uses fractions for math, so floating point errors should be avoided. This does mean that if you mean 1/3, you should enter 1/3, not 0.333.
+
 ## Installation
 
 ### "You Don't Know or Care What Python Packages Are" Installation
