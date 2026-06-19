@@ -1,7 +1,6 @@
 """Main GUI window."""
 
 import fractions as fr
-import functools
 import pathlib
 import typing as ty
 
@@ -10,7 +9,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from satisfactory_recipes import config as sr_config
 from satisfactory_recipes import info_classes as ic
 from satisfactory_recipes import production_chain as pc
-from satisfactory_recipes.gui import dialogs, recipe_format
+from satisfactory_recipes.gui import dialogs, widgets
 
 type ThemeName = ty.Literal["system", "light", "dark"]
 type StyleName = str
@@ -18,17 +17,6 @@ type StyleName = str
 
 class MainWindow(QtWidgets.QMainWindow):
     """Top-level GUI window for a production chain."""
-
-    SCALE_OPTIONS: tuple[fr.Fraction, ...] = (
-        fr.Fraction(1, 4),
-        fr.Fraction(1, 2),
-        fr.Fraction(3, 4),
-        fr.Fraction(1, 1),
-        fr.Fraction(5, 4),
-        fr.Fraction(3, 2),
-        fr.Fraction(7, 4),
-        fr.Fraction(2, 1),
-    )
 
     def __init__(
         self,
@@ -54,17 +42,26 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setWindowTitle("Satisfactory Recipes")
         self.resize(1100, 760)
 
-        self.goal_label = QtWidgets.QLabel()
-        self.recipes_table = QtWidgets.QTableWidget()
-        self.inputs_table = QtWidgets.QTableWidget()
-        self.outputs_table = QtWidgets.QTableWidget()
-        self.recipe_details_scroll = QtWidgets.QScrollArea()
-        self.recipe_details_widget = QtWidgets.QWidget()
-        self.recipe_details_layout = QtWidgets.QVBoxLayout()
+        self.goal_header = widgets.GoalHeader()
+        self.recipes_panel = widgets.RecipesPanel()
+        self.chain_details = widgets.ChainDetailsTabs()
         self.status_label = QtWidgets.QLabel()
-        self.scale_combo = QtWidgets.QComboBox()
-        self._refreshing_tables = False
-        self._updating_scale_combo = False
+
+        # Compatibility aliases for callers and characterization tests that used
+        # the original MainWindow-owned widgets.
+        self.goal_label = self.goal_header.goal_label
+        self.change_goal_button = self.goal_header.change_goal_button
+        self.scale_combo = self.goal_header.scale_combo
+        self.recipes_table = self.recipes_panel.table
+        self.add_goal_recipe_button = self.recipes_panel.add_goal_recipe_button
+        self.add_shortage_recipe_button = (
+            self.recipes_panel.add_shortage_recipe_button
+        )
+        self.inputs_table = self.chain_details.inputs_table
+        self.outputs_table = self.chain_details.outputs_table
+        self.recipe_details_scroll = self.chain_details.recipe_details
+        self.recipe_details_widget = self.chain_details.recipe_details.content_widget
+        self.recipe_details_layout = self.chain_details.recipe_details.content_layout
 
         self._setup_actions()
         self._setup_theme_actions()
@@ -165,25 +162,29 @@ class MainWindow(QtWidgets.QMainWindow):
         layout = QtWidgets.QVBoxLayout()
         central.setLayout(layout)
 
-        self.goal_label.setObjectName("goalLabel")
-        self.change_goal_button = QtWidgets.QPushButton("Set Goal...")
-        self.change_goal_button.clicked.connect(self.change_goal)
-        header_layout = QtWidgets.QHBoxLayout()
-        header_layout.addWidget(self.goal_label)
-        header_layout.addWidget(self.change_goal_button)
-        header_layout.addStretch()
-        header_layout.addWidget(QtWidgets.QLabel("Recipe scale"))
-        for scale in self.SCALE_OPTIONS:
-            self.scale_combo.addItem(self._scale_display_text(scale), scale)
-        self.scale_combo.currentIndexChanged.connect(self._handle_scale_changed)
-        header_layout.addWidget(self.scale_combo)
-        layout.addLayout(header_layout)
+        self.goal_header.change_goal_requested.connect(self.change_goal)
+        self.goal_header.scale_changed.connect(self._handle_scale_changed)
+        self.recipes_panel.add_goal_recipe_requested.connect(
+            self.add_goal_recipe_from_ui
+        )
+        self.recipes_panel.add_shortage_recipe_requested.connect(
+            self.add_shortage_recipe_from_ui
+        )
+        self.recipes_panel.remove_recipe_requested.connect(self.remove_recipe)
+        self.chain_details.amount_edit_requested.connect(
+            self._handle_net_amount_changed
+        )
+        self.chain_details.shortage_recipe_requested.connect(
+            self.add_shortage_recipe
+        )
+
+        layout.addWidget(self.goal_header)
 
         splitter = QtWidgets.QSplitter()
         splitter.setOpaqueResize(True)
         splitter.setChildrenCollapsible(False)
-        splitter.addWidget(self._make_recipes_panel())
-        splitter.addWidget(self._make_net_panel())
+        splitter.addWidget(self.recipes_panel)
+        splitter.addWidget(self.chain_details)
         splitter.setStretchFactor(0, 3)
         splitter.setStretchFactor(1, 2)
         splitter.setSizes([660, 440])
@@ -192,94 +193,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.status_label.setObjectName("statusLabel")
         layout.addWidget(self.status_label)
         self.setCentralWidget(central)
-
-    def _make_recipes_panel(self) -> QtWidgets.QWidget:
-        panel = QtWidgets.QWidget()
-        layout = QtWidgets.QVBoxLayout()
-        panel.setLayout(layout)
-
-        layout.addWidget(QtWidgets.QLabel("Recipes"))
-        action_layout = QtWidgets.QHBoxLayout()
-        self.add_goal_recipe_button = QtWidgets.QPushButton("Add Goal Recipe...")
-        self.add_shortage_recipe_button = QtWidgets.QPushButton(
-            "Add Shortage Recipe..."
-        )
-        self.add_goal_recipe_button.clicked.connect(self.add_goal_recipe_from_ui)
-        self.add_shortage_recipe_button.clicked.connect(
-            self.add_shortage_recipe_from_ui
-        )
-        action_layout.addWidget(self.add_goal_recipe_button)
-        action_layout.addWidget(self.add_shortage_recipe_button)
-        action_layout.addStretch()
-        layout.addLayout(action_layout)
-
-        self.recipes_table.setColumnCount(5)
-        self.recipes_table.setHorizontalHeaderLabels([
-            "",
-            "Recipe",
-            "Count",
-            "Building",
-            "Mean Power",
-        ])
-        self.recipes_table.setEditTriggers(
-            QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers
-        )
-        self.recipes_table.setSizePolicy(
-            QtWidgets.QSizePolicy.Policy.Expanding,
-            QtWidgets.QSizePolicy.Policy.Expanding,
-        )
-        recipe_header = self.recipes_table.horizontalHeader()
-        recipe_header.setSectionResizeMode(
-            0,
-            QtWidgets.QHeaderView.ResizeMode.Fixed,
-        )
-        self.recipes_table.setColumnWidth(0, 24)
-        recipe_header.setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeMode.Stretch)
-        recipe_header.setSectionResizeMode(
-            2,
-            QtWidgets.QHeaderView.ResizeMode.ResizeToContents,
-        )
-        recipe_header.setSectionResizeMode(3, QtWidgets.QHeaderView.ResizeMode.Stretch)
-        recipe_header.setSectionResizeMode(
-            4,
-            QtWidgets.QHeaderView.ResizeMode.ResizeToContents,
-        )
-        layout.addWidget(self.recipes_table)
-
-        return panel
-
-    def _make_net_panel(self) -> QtWidgets.QWidget:
-        tabs = QtWidgets.QTabWidget()
-        tabs.addTab(self.inputs_table, "Inputs")
-        tabs.addTab(self.outputs_table, "Outputs")
-        self.recipe_details_widget.setLayout(self.recipe_details_layout)
-        self.recipe_details_scroll.setWidget(self.recipe_details_widget)
-        self.recipe_details_scroll.setWidgetResizable(True)
-        tabs.addTab(self.recipe_details_scroll, "Recipe Details")
-
-        for table in (self.inputs_table, self.outputs_table):
-            table.setColumnCount(2)
-            table.setHorizontalHeaderLabels(["Item", "Per Minute"])
-            table.setEditTriggers(QtWidgets.QAbstractItemView.EditTrigger.DoubleClicked)
-            table.setSizePolicy(
-                QtWidgets.QSizePolicy.Policy.Expanding,
-                QtWidgets.QSizePolicy.Policy.Expanding,
-            )
-            header = table.horizontalHeader()
-            header.setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeMode.Stretch)
-            header.setSectionResizeMode(
-                1,
-                QtWidgets.QHeaderView.ResizeMode.ResizeToContents,
-            )
-            table.itemChanged.connect(self._handle_net_amount_changed)
-
-        self.inputs_table.itemDoubleClicked.connect(self._handle_input_double_clicked)
-        self.recipe_details_scroll.setSizePolicy(
-            QtWidgets.QSizePolicy.Policy.Expanding,
-            QtWidgets.QSizePolicy.Policy.Expanding,
-        )
-
-        return tabs
 
     def prompt_for_goal_if_needed(self) -> None:
         if self.production_chain is not None:
@@ -531,80 +444,34 @@ class MainWindow(QtWidgets.QMainWindow):
         self.save_chain()
 
     def refresh(self) -> None:
-        self._refreshing_tables = True
-        try:
-            self._refresh_impl()
-        finally:
-            self._refreshing_tables = False
+        self._refresh_impl()
 
     def _refresh_impl(self) -> None:
         chain = self.production_chain
         if chain is None:
-            self.goal_label.setText("No production chain loaded")
+            self.goal_header.set_goal(None)
             self.status_label.setText(
                 "Choose Set Goal or File > New to select a goal item."
             )
-            self._fill_recipes_table(None)
-            self._fill_net_table(self.inputs_table, {})
-            self._fill_net_table(self.outputs_table, {})
-            self._clear_recipe_details()
+            self.recipes_panel.set_chain(None)
+            self.chain_details.set_chain(None)
             self._update_recipe_actions()
             return
 
-        self.goal_label.setText(f"Goal: {chain.goal.name}")
+        self.goal_header.set_goal(chain.goal)
         filename = self.filename if self.filename is not None else "Unsaved"
         self.status_label.setText(f"File: {filename}{self._unsaved_marker()}")
-        self._fill_recipes_table(chain)
-
-        net = chain.get_net_per_min()
-        inputs = {item: -amount for item, amount in net.items() if amount < 0}
-        outputs = {item: amount for item, amount in net.items() if amount > 0}
-        self._fill_net_table(self.inputs_table, inputs)
-        self._fill_net_table(self.outputs_table, outputs)
-        self._fill_recipe_details(chain)
+        self.recipes_panel.set_chain(chain)
+        self.chain_details.set_chain(chain)
         self._update_recipe_actions()
         self._resize_table_rows()
 
-    def _handle_input_double_clicked(
-        self, table_item: QtWidgets.QTableWidgetItem
-    ) -> None:
-        if table_item.column() != 0:
-            return
-
-        item = table_item.data(QtCore.Qt.ItemDataRole.UserRole)
-        if isinstance(item, ic.Item):
-            self.add_shortage_recipe(shortage_item=item)
-
     def _handle_net_amount_changed(
-        self, table_item: QtWidgets.QTableWidgetItem
+        self,
+        item: ic.Item,
+        amount: fr.Fraction,
     ) -> None:
-        if self._refreshing_tables or table_item.column() != 1:
-            return
         if self.production_chain is None:
-            return
-
-        item = table_item.data(QtCore.Qt.ItemDataRole.UserRole)
-        if not isinstance(item, ic.Item):
-            return
-
-        try:
-            amount = fr.Fraction(table_item.text())
-        except ValueError:
-            QtWidgets.QMessageBox.warning(
-                self,
-                "Invalid Amount",
-                "Enter a positive number or fraction.",
-            )
-            self.refresh()
-            return
-
-        if amount <= 0:
-            QtWidgets.QMessageBox.warning(
-                self,
-                "Invalid Amount",
-                "Enter a positive number or fraction.",
-            )
-            self.refresh()
             return
 
         try:
@@ -617,12 +484,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self._mark_unsaved()
         self.refresh()
 
-    def _handle_scale_changed(self, _index: int) -> None:
-        if self._updating_scale_combo:
-            return
-
-        scale = self._selected_scale()
-        if scale is None or scale == self.game_data.scale:
+    def _handle_scale_changed(self, scale: fr.Fraction) -> None:
+        if scale == self.game_data.scale:
             return
 
         if self.production_chain is not None and self.production_chain.recipes:
@@ -1048,29 +911,8 @@ class MainWindow(QtWidgets.QMainWindow):
             }
         """
 
-    def _selected_scale(self) -> fr.Fraction | None:
-        data = self.scale_combo.currentData()
-        if isinstance(data, fr.Fraction):
-            return data
-        return None
-
     def _sync_scale_combo(self) -> None:
-        self._updating_scale_combo = True
-        try:
-            for index, scale in enumerate(self.SCALE_OPTIONS):
-                if scale == self.game_data.scale:
-                    self.scale_combo.setCurrentIndex(index)
-                    return
-            self.scale_combo.setCurrentIndex(-1)
-        finally:
-            self._updating_scale_combo = False
-
-    @staticmethod
-    def _scale_display_text(scale: fr.Fraction) -> str:
-        display = f"{float(scale):.2f}".rstrip("0")
-        if display.endswith("."):
-            display += "0"
-        return display
+        self.goal_header.set_recipe_scale(self.game_data.scale)
 
     def _update_recipe_actions(self) -> None:
         has_chain = self.production_chain is not None
@@ -1085,135 +927,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.add_shortage_recipe_action.setEnabled(
             has_chain and has_producible_shortages
         )
-        self.add_goal_recipe_button.setEnabled(has_chain)
-        self.add_shortage_recipe_button.setEnabled(
-            has_chain and has_producible_shortages
+        self.recipes_panel.set_actions_enabled(
+            has_chain=has_chain,
+            has_producible_shortages=has_producible_shortages,
         )
         self.change_goal_button.setEnabled(True)
-
-    def _fill_recipes_table(self, chain: pc.ProductionChain | None) -> None:
-        self.recipes_table.setRowCount(0)
-        if chain is None:
-            return
-
-        recipes = sorted(chain.recipes.items(), key=lambda pair: pair[0].name.lower())
-        self.recipes_table.setRowCount(len(recipes))
-        for row, (recipe, count) in enumerate(recipes):
-            self.recipes_table.setCellWidget(
-                row,
-                0,
-                self._make_remove_recipe_button(recipe),
-            )
-
-            building = recipe.produced_in.name if recipe.produced_in else ""
-            values = [
-                recipe.name,
-                f"{count:.3f}",
-                building,
-                f"{recipe.mean_power * count:.3f} MW",
-            ]
-            for col, value in enumerate(values):
-                self.recipes_table.setItem(
-                    row,
-                    col + 1,
-                    QtWidgets.QTableWidgetItem(value),
-                )
-
-        self.recipes_table.resizeRowsToContents()
-
-    def _make_remove_recipe_button(self, recipe: ic.Recipe) -> QtWidgets.QWidget:
-        remove_button = QtWidgets.QToolButton()
-        remove_button.setIcon(self._make_remove_icon())
-        remove_button.setIconSize(QtCore.QSize(12, 12))
-        remove_button.setAutoRaise(True)
-        remove_button.setFixedSize(16, 16)
-        remove_button.setToolTip("Remove recipe")
-        remove_button.setAccessibleName("Remove recipe")
-        remove_button.clicked.connect(functools.partial(self.remove_recipe, recipe))
-
-        wrapper = QtWidgets.QWidget()
-        layout = QtWidgets.QHBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-        layout.addStretch()
-        layout.addWidget(remove_button)
-        layout.addStretch()
-        wrapper.setLayout(layout)
-        return wrapper
-
-    def _make_remove_icon(self) -> QtGui.QIcon:
-        pixmap = QtGui.QPixmap(12, 12)
-        pixmap.fill(QtCore.Qt.GlobalColor.transparent)
-
-        color = self.palette().color(QtGui.QPalette.ColorRole.ButtonText)
-        painter = QtGui.QPainter(pixmap)
-        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
-        pen = QtGui.QPen(color, 1.8)
-        pen.setCapStyle(QtCore.Qt.PenCapStyle.RoundCap)
-        painter.setPen(pen)
-        painter.drawLine(3, 3, 9, 9)
-        painter.drawLine(9, 3, 3, 9)
-        painter.end()
-
-        return QtGui.QIcon(pixmap)
-
-    def _fill_recipe_details(self, chain: pc.ProductionChain) -> None:
-        self._clear_recipe_details()
-        recipes = sorted(chain.recipes.items(), key=lambda pair: pair[0].name.lower())
-        for recipe, count in recipes:
-            self.recipe_details_layout.addWidget(
-                self._make_recipe_details_card(recipe, count)
-            )
-
-        self.recipe_details_layout.addStretch()
-
-    def _clear_recipe_details(self) -> None:
-        while self.recipe_details_layout.count():
-            item = self.recipe_details_layout.takeAt(0)
-            if item is None:
-                continue
-            widget = item.widget()
-            if widget is not None:
-                widget.deleteLater()
-
-    def _make_recipe_details_card(
-        self,
-        recipe: ic.Recipe,
-        count: fr.Fraction,
-    ) -> QtWidgets.QGroupBox:
-        card = QtWidgets.QGroupBox(f"{recipe.name} x {count:.3f}")
-        card_layout = QtWidgets.QVBoxLayout()
-        card.setLayout(card_layout)
-
-        body = QtWidgets.QLabel()
-        body.setTextFormat(QtCore.Qt.TextFormat.RichText)
-        body.setText(recipe_format.recipe_body_html(recipe, count))
-        body.setWordWrap(True)
-        body.setTextInteractionFlags(
-            QtCore.Qt.TextInteractionFlag.TextSelectableByMouse
-        )
-        card_layout.addWidget(body)
-        return card
-
-    def _fill_net_table(
-        self,
-        table: QtWidgets.QTableWidget,
-        values: dict[ic.Item, fr.Fraction],
-    ) -> None:
-        items = sorted(values.items(), key=lambda pair: pair[0].name.lower())
-        table.setRowCount(len(items))
-        for row, (item, amount) in enumerate(items):
-            name_item = QtWidgets.QTableWidgetItem(item.name)
-            name_item.setFlags(name_item.flags() & ~QtCore.Qt.ItemFlag.ItemIsEditable)
-            name_item.setData(QtCore.Qt.ItemDataRole.UserRole, item)
-
-            amount_item = QtWidgets.QTableWidgetItem(f"{amount:.3f}")
-            amount_item.setData(QtCore.Qt.ItemDataRole.UserRole, item)
-
-            table.setItem(row, 0, name_item)
-            table.setItem(row, 1, amount_item)
-
-        table.resizeRowsToContents()
 
     def _resize_table_rows(self) -> None:
         for table in (self.recipes_table, self.inputs_table, self.outputs_table):
