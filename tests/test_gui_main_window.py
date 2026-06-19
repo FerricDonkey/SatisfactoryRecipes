@@ -121,10 +121,10 @@ def test_window_renders_empty_state(
 ) -> None:
     window = make_window(qtbot, gui_scenario, chain=None)
 
-    assert window.goal_label.text() == "No production chain loaded"
-    assert window.recipes_table.rowCount() == 0
-    assert window.inputs_table.rowCount() == 0
-    assert window.outputs_table.rowCount() == 0
+    assert window.goal_header.goal_label.text() == "No production chain loaded"
+    assert window.recipes_panel.table.rowCount() == 0
+    assert window.chain_details.inputs_table.rowCount() == 0
+    assert window.chain_details.outputs_table.rowCount() == 0
     assert not window.add_goal_recipe_action.isEnabled()
     assert not window.add_shortage_recipe_action.isEnabled()
 
@@ -135,24 +135,30 @@ def test_window_renders_representative_chain(
 ) -> None:
     window = make_window(qtbot, gui_scenario, chain=gui_scenario.chain)
 
-    assert window.goal_label.text() == "Goal: Iron Plate"
+    assert window.goal_header.goal_label.text() == "Goal: Iron Plate"
     assert window.status_label.text() == "File: Unsaved"
-    assert window.recipes_table.rowCount() == 1
-    assert get_table_item(window.recipes_table, 0, 1).text() == "Iron Plate"
-    assert get_table_item(window.recipes_table, 0, 2).text() == "3.000"
-    assert get_table_item(window.recipes_table, 0, 3).text() == "Constructor"
-    assert get_table_item(window.recipes_table, 0, 4).text() == "12.000 MW"
+    assert window.recipes_panel.table.rowCount() == 1
+    assert get_table_item(window.recipes_panel.table, 0, 1).text() == "Iron Plate"
+    assert get_table_item(window.recipes_panel.table, 0, 2).text() == "3.000"
+    assert get_table_item(window.recipes_panel.table, 0, 3).text() == "Constructor"
+    assert get_table_item(window.recipes_panel.table, 0, 4).text() == "12.000 MW"
 
-    assert window.inputs_table.rowCount() == 1
-    assert get_table_item(window.inputs_table, 0, 0).text() == "Iron Ingot"
-    assert get_table_item(window.inputs_table, 0, 1).text() == "6.000"
-    assert window.outputs_table.rowCount() == 1
-    assert get_table_item(window.outputs_table, 0, 0).text() == "Iron Plate"
-    assert get_table_item(window.outputs_table, 0, 1).text() == "3.000"
+    assert window.chain_details.inputs_table.rowCount() == 1
+    assert (
+        get_table_item(window.chain_details.inputs_table, 0, 0).text() == "Iron Ingot"
+    )
+    assert get_table_item(window.chain_details.inputs_table, 0, 1).text() == "6.000"
+    assert window.chain_details.outputs_table.rowCount() == 1
+    assert (
+        get_table_item(window.chain_details.outputs_table, 0, 0).text() == "Iron Plate"
+    )
+    assert get_table_item(window.chain_details.outputs_table, 0, 1).text() == "3.000"
 
     detail_text = " ".join(
         label.text()
-        for label in window.recipe_details_widget.findChildren(QtWidgets.QLabel)
+        for label in window.chain_details.recipe_details.content_widget.findChildren(
+            QtWidgets.QLabel
+        )
     )
     assert "Iron Plate" in detail_text
     assert "Produced in <b>Constructor</b>" in detail_text
@@ -166,14 +172,14 @@ def test_recipe_actions_follow_available_shortages(
 
     assert window.add_goal_recipe_action.isEnabled()
     assert window.add_shortage_recipe_action.isEnabled()
-    assert window.add_goal_recipe_button.isEnabled()
-    assert window.add_shortage_recipe_button.isEnabled()
+    assert window.recipes_panel.add_goal_recipe_button.isEnabled()
+    assert window.recipes_panel.add_shortage_recipe_button.isEnabled()
 
     gui_scenario.chain.recipes[gui_scenario.ingot_recipe] = fr.Fraction(6)
     window.refresh()
 
     assert not window.add_shortage_recipe_action.isEnabled()
-    assert not window.add_shortage_recipe_button.isEnabled()
+    assert not window.recipes_panel.add_shortage_recipe_button.isEnabled()
 
 
 def test_refresh_computes_chain_view_state_once(
@@ -209,7 +215,7 @@ def test_remove_recipe_button_updates_chain_and_dirty_state(
     gui_scenario: GuiScenario,
 ) -> None:
     window = make_window(qtbot, gui_scenario, chain=gui_scenario.chain)
-    button_wrapper = window.recipes_table.cellWidget(0, 0)
+    button_wrapper = window.recipes_panel.table.cellWidget(0, 0)
     assert button_wrapper is not None
     remove_button = button_wrapper.findChild(QtWidgets.QToolButton)
     assert remove_button is not None
@@ -217,7 +223,7 @@ def test_remove_recipe_button_updates_chain_and_dirty_state(
     remove_button.click()
 
     assert gui_scenario.plate_recipe not in gui_scenario.chain.recipes
-    assert window.recipes_table.rowCount() == 0
+    assert window.recipes_panel.table.rowCount() == 0
     assert window.has_unsaved_changes
     assert window.status_label.text() == "File: Unsaved *"
 
@@ -227,13 +233,13 @@ def test_editing_net_rate_scales_chain_exactly(
     gui_scenario: GuiScenario,
 ) -> None:
     window = make_window(qtbot, gui_scenario, chain=gui_scenario.chain)
-    amount_item = get_table_item(window.outputs_table, 0, 1)
+    amount_item = get_table_item(window.chain_details.outputs_table, 0, 1)
 
     amount_item.setText("7/2")
 
     assert gui_scenario.chain.recipes[gui_scenario.plate_recipe] == fr.Fraction(7, 2)
-    assert get_table_item(window.outputs_table, 0, 1).text() == "3.500"
-    assert get_table_item(window.inputs_table, 0, 1).text() == "7.000"
+    assert get_table_item(window.chain_details.outputs_table, 0, 1).text() == "3.500"
+    assert get_table_item(window.chain_details.inputs_table, 0, 1).text() == "7.000"
     assert window.has_unsaved_changes
 
 
@@ -259,12 +265,12 @@ def test_double_clicking_input_adds_recipe_for_that_shortage(
         choose_ingot_recipe,
     )
 
-    input_name_item = get_table_item(window.inputs_table, 0, 0)
-    window.inputs_table.itemDoubleClicked.emit(input_name_item)
+    input_name_item = get_table_item(window.chain_details.inputs_table, 0, 0)
+    window.chain_details.inputs_table.itemDoubleClicked.emit(input_name_item)
 
     assert gui_scenario.chain.recipes[gui_scenario.ingot_recipe] == fr.Fraction(6)
-    assert get_table_item(window.inputs_table, 0, 0).text() == "Ore"
-    assert get_table_item(window.inputs_table, 0, 1).text() == "12.000"
+    assert get_table_item(window.chain_details.inputs_table, 0, 0).text() == "Ore"
+    assert get_table_item(window.chain_details.inputs_table, 0, 1).text() == "12.000"
     assert not window.add_shortage_recipe_action.isEnabled()
 
 
@@ -476,8 +482,8 @@ def test_scale_combo_reflects_current_game_data_scale(
     gui_scenario.game_data.scale = fr.Fraction(1, 2)
     window = make_window(qtbot, gui_scenario, chain=gui_scenario.chain)
 
-    assert window.scale_combo.currentData() == fr.Fraction(1, 2)
-    assert window.scale_combo.currentText() == "0.5"
+    assert window.goal_header.scale_combo.currentData() == fr.Fraction(1, 2)
+    assert window.goal_header.scale_combo.currentText() == "0.5"
 
 
 def test_saved_theme_style_and_zoom_are_applied(
@@ -518,14 +524,14 @@ def test_saved_theme_style_and_zoom_are_applied(
         )
         assert window.appearance_manager.zoom_steps == 2
         assert qapp.styleSheet()
-        checked_theme = window.theme_action_group.checkedAction()
+        checked_theme = window.appearance_manager.theme_action_group.checkedAction()
         assert checked_theme is not None
         assert checked_theme.data() == "dark"
-        checked_style = window.style_action_group.checkedAction()
+        checked_style = window.appearance_manager.style_action_group.checkedAction()
         assert checked_style is not None
         assert str(checked_style.data()).lower() == original_style.lower()
 
-        wrapper = window.recipes_table.cellWidget(0, 0)
+        wrapper = window.recipes_panel.table.cellWidget(0, 0)
         assert wrapper is not None
         remove_button = wrapper.findChild(QtWidgets.QToolButton)
         assert remove_button is not None

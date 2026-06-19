@@ -102,8 +102,12 @@ def test_recipes_panel_renders_and_emits_recipe_actions(qtbot: QtBot) -> None:
     )
 
     assert panel.table.rowCount() == 1
-    assert panel.table.item(0, 1).text() == "Iron Ingot"  # type: ignore[union-attr]
-    assert panel.table.item(0, 4).text() == "12.000 MW"  # type: ignore[union-attr]
+    recipe_name = panel.table.item(0, 1)
+    mean_power = panel.table.item(0, 4)
+    assert recipe_name is not None
+    assert mean_power is not None
+    assert recipe_name.text() == "Iron Ingot"
+    assert mean_power.text() == "12.000 MW"
 
     panel.add_goal_recipe_button.click()
     panel.add_shortage_recipe_button.click()

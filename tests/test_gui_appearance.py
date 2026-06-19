@@ -2,7 +2,7 @@ from PySide6 import QtGui, QtWidgets
 from pytestqt.qtbot import QtBot
 
 from satisfactory_recipes import config as sr_config
-from satisfactory_recipes.gui.appearance import AppearanceManager
+from satisfactory_recipes.gui.appearance import AppearanceManager, ThemeName
 
 
 def test_appearance_manager_owns_actions_and_persists_user_changes(
@@ -48,6 +48,12 @@ def test_appearance_manager_owns_actions_and_persists_user_changes(
         assert manager.zoom_in_action.shortcut().toString()
         assert manager.zoom_out_action.shortcut().toString()
         assert manager.reset_zoom_action.shortcut().toString() == "Ctrl+0"
+
+        manager.set_zoom_steps(-99)
+        assert configuration.gui_zoom_steps == -5
+        assert manager.zoom_steps == -5
+        assert save_count == 3
+        assert change_count == 3
     finally:
         qapp.setPalette(original_palette)
         qapp.setFont(original_font)
@@ -113,3 +119,41 @@ def test_invalid_saved_style_is_cleared_and_saved() -> None:
 
     assert configuration.gui_style is None
     assert save_count == 1
+
+
+def test_every_available_qt_style_supports_each_theme(
+    qtbot: QtBot,
+    qapp: QtWidgets.QApplication,
+) -> None:
+    original_palette = QtGui.QPalette(qapp.palette())
+    original_font = QtGui.QFont(qapp.font())
+    original_stylesheet = qapp.styleSheet()
+    original_style = qapp.style().objectName()
+    manager = AppearanceManager(
+        configuration=sr_config.Configuration(),
+        save_callback=lambda: None,
+    )
+    probe = QtWidgets.QTableWidget(1, 1)
+    probe.setItem(0, 0, QtWidgets.QTableWidgetItem("Theme probe"))
+    qtbot.addWidget(probe)
+    probe.show()
+    themes: tuple[ThemeName, ...] = ("system", "light", "dark")
+
+    try:
+        for style_name in QtWidgets.QStyleFactory.keys():
+            manager.set_style(style_name, persist=False)
+            checked_style = manager.style_action_group.checkedAction()
+            assert checked_style is not None
+            assert str(checked_style.data()).lower() == style_name.lower()
+            for theme_name in themes:
+                manager.set_theme(theme_name, persist=False)
+                qapp.processEvents()
+                checked_theme = manager.theme_action_group.checkedAction()
+                assert checked_theme is not None
+                assert checked_theme.data() == theme_name
+                assert probe.isVisible()
+    finally:
+        qapp.setPalette(original_palette)
+        qapp.setFont(original_font)
+        qapp.setStyleSheet(original_stylesheet)
+        QtWidgets.QApplication.setStyle(original_style)

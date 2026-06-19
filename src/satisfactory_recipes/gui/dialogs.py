@@ -1,4 +1,4 @@
-"""Reusable GUI dialogs."""
+"""Application dialogs composed from reusable selection and input widgets."""
 
 import dataclasses
 import enum
@@ -6,7 +6,7 @@ import fractions as fr
 import pathlib
 import typing as ty
 
-from PySide6 import QtCore, QtWidgets
+from PySide6 import QtWidgets
 
 from satisfactory_recipes import config as sr_config
 from satisfactory_recipes import info_classes as ic
@@ -285,16 +285,6 @@ class ItemSearchDialog(_SearchDialog[ic.Item]):
             )
             load_button.clicked.connect(self._request_load_file)
 
-    def _refresh_items(self, text: str) -> None:
-        self.selection_widget.refresh(text)
-
-    def _accept_item(self, item: QtWidgets.QListWidgetItem) -> None:
-        selected_item = ty.cast(ic.Item, item.data(QtCore.Qt.ItemDataRole.UserRole))
-        self._accept_object(selected_item)
-
-    def _accept_selected_item(self) -> None:
-        self._accept_selected_object()
-
     def _store_selected_object(self, selected_object: ic.Item) -> None:
         self.selected_item = selected_object
 
@@ -388,14 +378,6 @@ class RecipeSearchDialog(_SearchDialog[ic.Recipe]):
         self.selection_widget.selection_changed.connect(self._update_recipe_preview)
         self._update_recipe_preview(self.selection_widget.selected_object)
 
-    def _refresh_recipes(self, text: str) -> None:
-        self.selection_widget.refresh(text)
-
-    def _update_selection(self) -> None:
-        selected_recipe = self.selection_widget.selected_object
-        self._update_ok_button(selected_recipe)
-        self._update_recipe_preview(selected_recipe)
-
     def _update_recipe_preview(self, selected_object: object | None) -> None:
         if selected_object is None:
             self.details.clear()
@@ -407,15 +389,6 @@ class RecipeSearchDialog(_SearchDialog[ic.Recipe]):
                 [recipe_format.recipe_details_html(recipe, fr.Fraction(1))]
             )
         )
-
-    def _accept_recipe(self, item: QtWidgets.QListWidgetItem) -> None:
-        selected_recipe = ty.cast(
-            ic.Recipe, item.data(QtCore.Qt.ItemDataRole.UserRole)
-        )
-        self._accept_object(selected_recipe)
-
-    def _accept_selected_recipe(self) -> None:
-        self._accept_selected_object()
 
     def _store_selected_object(self, selected_object: ic.Recipe) -> None:
         self.selected_recipe = selected_object

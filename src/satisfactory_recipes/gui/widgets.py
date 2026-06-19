@@ -1,4 +1,4 @@
-"""Reusable widgets for displaying and editing a production chain."""
+"""Data-driven widgets that display chain state and emit user intent."""
 
 import collections.abc as cabc
 import fractions as fr

@@ -1,4 +1,4 @@
-"""Main GUI window."""
+"""Top-level coordination for GUI session state and user workflows."""
 
 import fractions as fr
 import pathlib
@@ -44,20 +44,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.chain_details = widgets.ChainDetailsTabs()
         self.status_label = QtWidgets.QLabel()
 
-        # Compatibility aliases for callers and characterization tests that used
-        # the original MainWindow-owned widgets.
-        self.goal_label = self.goal_header.goal_label
-        self.change_goal_button = self.goal_header.change_goal_button
-        self.scale_combo = self.goal_header.scale_combo
-        self.recipes_table = self.recipes_panel.table
-        self.add_goal_recipe_button = self.recipes_panel.add_goal_recipe_button
-        self.add_shortage_recipe_button = self.recipes_panel.add_shortage_recipe_button
-        self.inputs_table = self.chain_details.inputs_table
-        self.outputs_table = self.chain_details.outputs_table
-        self.recipe_details_scroll = self.chain_details.recipe_details
-        self.recipe_details_widget = self.chain_details.recipe_details.content_widget
-        self.recipe_details_layout = self.chain_details.recipe_details.content_layout
-
         self._setup_actions()
         self._setup_theme_actions()
         self._setup_layout()
@@ -73,10 +59,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.exit_action = QtGui.QAction("Exit", self)
         self.add_goal_recipe_action = QtGui.QAction("Add Goal Recipe...", self)
         self.add_shortage_recipe_action = QtGui.QAction("Add Shortage Recipe...", self)
-        self.zoom_in_action = self.appearance_manager.zoom_in_action
-        self.zoom_out_action = self.appearance_manager.zoom_out_action
-        self.reset_zoom_action = self.appearance_manager.reset_zoom_action
-
         self.open_action.setShortcut(QtGui.QKeySequence.StandardKey.Open)
         self.save_action.setShortcut(QtGui.QKeySequence.StandardKey.Save)
         self.save_as_action.setShortcut(QtGui.QKeySequence.StandardKey.SaveAs)
@@ -108,15 +90,13 @@ class MainWindow(QtWidgets.QMainWindow):
         recipe_menu.addAction(self.add_shortage_recipe_action)
 
         view_menu = self.menuBar().addMenu("View")
-        view_menu.addAction(self.zoom_in_action)
-        view_menu.addAction(self.zoom_out_action)
-        view_menu.addAction(self.reset_zoom_action)
+        view_menu.addAction(self.appearance_manager.zoom_in_action)
+        view_menu.addAction(self.appearance_manager.zoom_out_action)
+        view_menu.addAction(self.appearance_manager.reset_zoom_action)
 
     def _setup_theme_actions(self) -> None:
         options_menu = self.menuBar().addMenu("Options")
         self.appearance_manager.populate_options_menu(options_menu)
-        self.theme_action_group = self.appearance_manager.theme_action_group
-        self.style_action_group = self.appearance_manager.style_action_group
 
     def _setup_layout(self) -> None:
         central = QtWidgets.QWidget()
@@ -477,15 +457,6 @@ class MainWindow(QtWidgets.QMainWindow):
                 return
 
         self._set_recipe_scale(scale)
-
-    def zoom_in(self) -> None:
-        self.appearance_manager.zoom_in()
-
-    def zoom_out(self) -> None:
-        self.appearance_manager.zoom_out()
-
-    def reset_zoom(self) -> None:
-        self.appearance_manager.reset_zoom()
 
     def _handle_appearance_changed(self) -> None:
         self.recipes_panel.refresh_appearance()
