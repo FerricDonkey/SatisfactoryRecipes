@@ -182,6 +182,10 @@ class _SearchDialog[T](QtWidgets.QDialog):
         search_placeholder: str,
         size: tuple[int, int],
         show_amount: bool,
+        unfiltered_sort_key: ty.Callable[
+            [dialog_components.SelectionOption[T]], tuple[bool, str]
+        ]
+        | None = None,
         detail_widget: QtWidgets.QWidget | None = None,
         parent: QtWidgets.QWidget | None = None,
     ) -> None:
@@ -194,6 +198,7 @@ class _SearchDialog[T](QtWidgets.QDialog):
         self.selection_widget = dialog_components.SearchableSelectionList(
             options=options,
             search_placeholder=search_placeholder,
+            unfiltered_sort_key=unfiltered_sort_key,
             detail_widget=detail_widget,
         )
         self.search_edit = self.selection_widget.search_edit
@@ -356,6 +361,13 @@ def choose_item_from_items(
     return None
 
 
+def _recipe_selection_sort_key(
+    option: dialog_components.SelectionOption[ic.Recipe],
+) -> tuple[bool, str]:
+    normalized_name = option.label.casefold()
+    return normalized_name.startswith("alternate:"), normalized_name
+
+
 class RecipeSearchDialog(_SearchDialog[ic.Recipe]):
     """Dialog for selecting a recipe from a searchable list."""
 
@@ -379,6 +391,7 @@ class RecipeSearchDialog(_SearchDialog[ic.Recipe]):
             search_placeholder="Search recipes",
             size=(760, 640),
             show_amount=show_amount,
+            unfiltered_sort_key=_recipe_selection_sort_key,
             detail_widget=self.details,
             parent=parent,
         )

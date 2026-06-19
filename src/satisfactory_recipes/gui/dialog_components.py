@@ -32,11 +32,16 @@ class SearchableSelectionList[T](QtWidgets.QWidget):
         *,
         options: cabc.Iterable[SelectionOption[T]],
         search_placeholder: str,
+        unfiltered_sort_key: cabc.Callable[[SelectionOption[T]], tuple[bool, str]]
+        | None = None,
         detail_widget: QtWidgets.QWidget | None = None,
         parent: QtWidgets.QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._options = tuple(options)
+        self._unfiltered_sort_key = unfiltered_sort_key or (
+            lambda option: (False, option.label.casefold())
+        )
 
         self.search_edit = QtWidgets.QLineEdit()
         self.search_edit.setPlaceholderText(search_placeholder)
@@ -75,7 +80,7 @@ class SearchableSelectionList[T](QtWidgets.QWidget):
         options = (
             search.sort_objects(self._options, text, label=lambda option: option.label)
             if text
-            else sorted(self._options, key=lambda option: option.label)
+            else sorted(self._options, key=self._unfiltered_sort_key)
         )
 
         self.list_widget.clear()

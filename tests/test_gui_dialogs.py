@@ -81,6 +81,37 @@ def test_recipe_search_updates_preview_and_returns_selection(
     assert dialog.selected_amount_per_min == fr.Fraction(7, 3)
 
 
+def test_recipe_search_lists_standard_recipes_before_alternates(
+    qtbot: pytestqt.qtbot.QtBot,
+) -> None:
+    recipes = [
+        support.make_fake_recipe(
+            name=name,
+            class_name=f"Recipe_{index}_C",
+            inputs={},
+        )
+        for index, name in enumerate(
+            (
+                "Alternate: Bolted Frame",
+                "Steel Beam",
+                "Alternate: Adhered Iron Plate",
+                "Iron Plate",
+            )
+        )
+    ]
+    dialog = dialogs.RecipeSearchDialog(recipes=recipes, title="Choose Recipe")
+    qtbot.addWidget(dialog)
+
+    assert [
+        dialog.recipe_list.item(row).text() for row in range(dialog.recipe_list.count())
+    ] == [
+        "Iron Plate",
+        "Steel Beam",
+        "Alternate: Adhered Iron Plate",
+        "Alternate: Bolted Frame",
+    ]
+
+
 def test_item_search_double_click_accepts_current_item(
     qtbot: pytestqt.qtbot.QtBot,
 ) -> None:
