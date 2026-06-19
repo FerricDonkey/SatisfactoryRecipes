@@ -5,7 +5,7 @@ from __future__ import annotations
 import fractions as fr
 import pathlib
 
-from PySide6 import QtGui, QtWidgets
+from PySide6 import QtCore, QtGui, QtWidgets
 
 from satisfactory_recipes import config as sr_config
 from satisfactory_recipes import docs_parser
@@ -33,6 +33,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.production_chain = production_chain
         self.filename = filename
         self.has_unsaved_changes = False
+        self.selected_recipe: ic.Recipe | None = None
         self.appearance_manager = appearance.AppearanceManager(
             configuration=self.user_config,
             save_callback=self._save_user_config,
@@ -115,6 +116,11 @@ class MainWindow(QtWidgets.QMainWindow):
             self.add_shortage_recipe_from_ui
         )
         self.recipes_panel.remove_recipe_requested.connect(self.remove_recipe)
+        self.recipes_panel.recipe_selected.connect(self._handle_recipe_selected)
+        self.recipes_panel.recipe_count_edit_requested.connect(
+            self._handle_recipe_count_changed,
+            QtCore.Qt.ConnectionType.QueuedConnection,
+        )
         self.chain_details.amount_edit_requested.connect(
             self._handle_net_amount_changed
         )
@@ -405,6 +411,9 @@ class MainWindow(QtWidgets.QMainWindow):
             filename=self.filename,
             has_unsaved_changes=self.has_unsaved_changes,
         )
+        displayed_recipes = {recipe for recipe, _count in state.recipes}
+        if self.selected_recipe not in displayed_recipes:
+            self.selected_recipe = None
         self.goal_header.set_view(
             goal=state.goal,
             recipe_scale=state.recipe_scale,
@@ -414,14 +423,45 @@ class MainWindow(QtWidgets.QMainWindow):
             recipes=state.recipes,
             can_add_goal_recipe=state.can_add_goal_recipe,
             can_add_shortage_recipe=state.can_add_shortage_recipe,
+            selected_recipe=self.selected_recipe,
         )
         self.chain_details.set_view(
             inputs=state.inputs,
             outputs=state.outputs,
             recipes=state.recipes,
+            selected_recipe=self.selected_recipe,
         )
         self.add_goal_recipe_action.setEnabled(state.can_add_goal_recipe)
         self.add_shortage_recipe_action.setEnabled(state.can_add_shortage_recipe)
+
+    def _handle_recipe_selected(self, selected: object) -> None:
+        recipe = selected if isinstance(selected, ic.Recipe) else None
+        self.selected_recipe = recipe
+        self.chain_details.focus_recipe(recipe)
+
+    def _handle_recipe_count_changed(
+        self,
+        selected: object,
+        value: object,
+    ) -> None:
+        if (
+            self.production_chain is None
+            or not isinstance(selected, ic.Recipe)
+            or not isinstance(value, fr.Fraction)
+            or selected not in self.production_chain.recipes
+        ):
+            return
+
+        try:
+            self.production_chain.scale_recipe_count(selected, value)
+        except Exception as exc:
+            QtWidgets.QMessageBox.critical(self, "Could Not Scale", str(exc))
+            self.refresh()
+            return
+
+        self.selected_recipe = selected
+        self._mark_unsaved()
+        self.refresh()
 
     def _handle_net_amount_changed(
         self,

@@ -171,6 +171,21 @@ class ProductionChain:
         amount = abs(amount)
         self.recipes *= fr.Fraction(amount, current_amount)
 
+    def scale_recipe_count(self, recipe: ic.Recipe, count: fr.Fraction) -> None:
+        """Scale the entire chain until one recipe has the requested count."""
+        if count <= 0:
+            raise ValueError("Recipe count must be positive")
+        if recipe not in self.recipes:
+            raise ValueError(f"Recipe is not in production chain: {recipe.name}")
+
+        current_count = self.recipes[recipe]
+        if current_count <= 0:
+            raise ValueError(
+                f"Cannot scale {recipe.name}; current count is not positive"
+            )
+
+        self.recipes *= count / current_count
+
     def to_saveable(self, scale: fr.Fraction) -> "_ProductionChainSavable":
         """Convert to a saveable format. It is the caller's responsibility to ensure scale is correct."""
         return _ProductionChainSavable(

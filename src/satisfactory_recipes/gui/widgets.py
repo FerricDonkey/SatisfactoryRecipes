@@ -14,6 +14,25 @@ from satisfactory_recipes.gui import number_format, recipe_format
 type ItemRates = cabc.Sequence[tuple[ic.Item, fr.Fraction]]
 type RecipeCounts = cabc.Sequence[tuple[ic.Recipe, fr.Fraction]]
 
+EXACT_VALUE_ROLE = int(QtCore.Qt.ItemDataRole.UserRole) + 1
+
+
+class _ExactFractionDelegate(QtWidgets.QStyledItemDelegate):
+    """Show the exact stored fraction when a formatted numeric cell is edited."""
+
+    def setEditorData(
+        self,
+        editor: QtWidgets.QWidget,
+        index: QtCore.QModelIndex | QtCore.QPersistentModelIndex,
+    ) -> None:
+        if isinstance(editor, QtWidgets.QLineEdit):
+            exact_value = index.data(EXACT_VALUE_ROLE)
+            if isinstance(exact_value, fr.Fraction):
+                editor.setText(str(exact_value))
+                editor.selectAll()
+                return
+        super().setEditorData(editor, index)
+
 
 class GoalHeader(QtWidgets.QWidget):
     """Goal display and recipe input-scale controls."""
@@ -95,6 +114,10 @@ class RecipesPanel(QtWidgets.QWidget):
     add_goal_recipe_requested = QtCore.Signal()
     add_shortage_recipe_requested = QtCore.Signal()
     remove_recipe_requested = QtCore.Signal(object)
+    recipe_selected = QtCore.Signal(object)
+    recipe_count_edit_requested = QtCore.Signal(object, object)
+
+    COUNT_EDIT_HINT = "Double-click a Count cell to change the number of machines."
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
@@ -115,7 +138,13 @@ class RecipesPanel(QtWidgets.QWidget):
             ]
         )
         self.table.setEditTriggers(
-            QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers
+            QtWidgets.QAbstractItemView.EditTrigger.DoubleClicked
+        )
+        self.table.setSelectionBehavior(
+            QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows
+        )
+        self.table.setSelectionMode(
+            QtWidgets.QAbstractItemView.SelectionMode.SingleSelection
         )
         self.table.setSizePolicy(
             QtWidgets.QSizePolicy.Policy.Expanding,
@@ -132,6 +161,11 @@ class RecipesPanel(QtWidgets.QWidget):
         header.setSectionResizeMode(
             4, QtWidgets.QHeaderView.ResizeMode.ResizeToContents
         )
+        count_header = self.table.horizontalHeaderItem(2)
+        if count_header is not None:
+            count_header.setToolTip(self.COUNT_EDIT_HINT)
+        self.table.setToolTip(self.COUNT_EDIT_HINT)
+        self.table.setItemDelegateForColumn(2, _ExactFractionDelegate(self.table))
 
         action_layout = QtWidgets.QHBoxLayout()
         action_layout.addWidget(self.add_goal_recipe_button)
@@ -147,6 +181,10 @@ class RecipesPanel(QtWidgets.QWidget):
         self.add_shortage_recipe_button.clicked.connect(
             self.add_shortage_recipe_requested
         )
+        self.table.itemSelectionChanged.connect(self._emit_selected_recipe)
+        self.table.itemChanged.connect(self._handle_item_changed)
+        self._recipes_by_row: list[ic.Recipe] = []
+        self._recipe_counts: dict[ic.Recipe, fr.Fraction] = {}
 
     def set_view(
         self,
@@ -154,34 +192,103 @@ class RecipesPanel(QtWidgets.QWidget):
         recipes: RecipeCounts,
         can_add_goal_recipe: bool,
         can_add_shortage_recipe: bool,
+        selected_recipe: ic.Recipe | None = None,
     ) -> None:
-        self.table.setRowCount(0)
-        self.table.setRowCount(len(recipes))
-        for row, (recipe, count) in enumerate(recipes):
-            self.table.setCellWidget(row, 0, self._make_remove_button(recipe))
-            building = recipe.produced_in.name if recipe.produced_in else ""
-            power = recipe.mean_power * count
-            values = (
-                (recipe.name, ""),
-                (
-                    number_format.decimal(count),
-                    number_format.exact_tooltip(count),
-                ),
-                (building, ""),
-                (
-                    number_format.decimal(power, unit="MW"),
-                    number_format.exact_tooltip(power, unit="MW"),
-                ),
-            )
-            for column, (value, tooltip) in enumerate(values, start=1):
-                table_item = QtWidgets.QTableWidgetItem(value)
-                if tooltip:
-                    table_item.setToolTip(tooltip)
-                self.table.setItem(row, column, table_item)
+        self._recipes_by_row = [recipe for recipe, _count in recipes]
+        self._recipe_counts = dict(recipes)
+        blocker = QtCore.QSignalBlocker(self.table)
+        try:
+            self.table.setRowCount(0)
+            self.table.setRowCount(len(recipes))
+            selected_row: int | None = None
+            for row, (recipe, count) in enumerate(recipes):
+                self.table.setCellWidget(row, 0, self._make_remove_button(recipe))
+                building = recipe.produced_in.name if recipe.produced_in else ""
+                power = recipe.mean_power * count
+                values = (
+                    (recipe.name, ""),
+                    (
+                        number_format.decimal(count),
+                        number_format.exact_tooltip(count),
+                    ),
+                    (building, ""),
+                    (
+                        number_format.decimal(power, unit="MW"),
+                        number_format.exact_tooltip(power, unit="MW"),
+                    ),
+                )
+                for column, (value, tooltip) in enumerate(values, start=1):
+                    table_item = QtWidgets.QTableWidgetItem(value)
+                    if column != 2:
+                        table_item.setFlags(
+                            table_item.flags() & ~QtCore.Qt.ItemFlag.ItemIsEditable
+                        )
+                    else:
+                        table_item.setData(EXACT_VALUE_ROLE, count)
+                        tooltip = number_format.exact_tooltip(
+                            count,
+                            hint=self.COUNT_EDIT_HINT,
+                        )
+                    if tooltip:
+                        table_item.setToolTip(tooltip)
+                    self.table.setItem(row, column, table_item)
+                if recipe is selected_recipe:
+                    selected_row = row
+
+            if selected_row is not None:
+                self.table.selectRow(selected_row)
+        finally:
+            del blocker
 
         self.table.resizeRowsToContents()
         self.add_goal_recipe_button.setEnabled(can_add_goal_recipe)
         self.add_shortage_recipe_button.setEnabled(can_add_shortage_recipe)
+
+    def _emit_selected_recipe(self) -> None:
+        selected_rows = self.table.selectionModel().selectedRows()
+        if not selected_rows:
+            self.recipe_selected.emit(None)
+            return
+
+        row = selected_rows[0].row()
+        if 0 <= row < len(self._recipes_by_row):
+            self.recipe_selected.emit(self._recipes_by_row[row])
+
+    def _handle_item_changed(self, table_item: QtWidgets.QTableWidgetItem) -> None:
+        if table_item.column() != 2:
+            return
+        row = table_item.row()
+        if not 0 <= row < len(self._recipes_by_row):
+            return
+
+        recipe = self._recipes_by_row[row]
+        try:
+            count = fr.Fraction(table_item.text().replace(",", ""))
+        except ValueError:
+            count = fr.Fraction(0)
+        if count <= 0:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Invalid Recipe Count",
+                "Enter a positive number or fraction.",
+            )
+            self._restore_recipe_count(table_item, recipe)
+            return
+
+        self.recipe_count_edit_requested.emit(recipe, count)
+
+    def _restore_recipe_count(
+        self,
+        table_item: QtWidgets.QTableWidgetItem,
+        recipe: ic.Recipe,
+    ) -> None:
+        count = self._recipe_counts[recipe]
+        blocker = QtCore.QSignalBlocker(self.table)
+        try:
+            table_item.setText(number_format.decimal(count))
+            table_item.setData(EXACT_VALUE_ROLE, count)
+        finally:
+            del blocker
 
     def refresh_appearance(self) -> None:
         """Refresh palette-dependent icons and font-dependent row sizes."""
@@ -253,6 +360,7 @@ class NetItemsTable(QtWidgets.QTableWidget):
         super().__init__(parent)
         self._rendering = False
         self._values: dict[ic.Item, fr.Fraction] = {}
+        self._highlighted_items: frozenset[ic.Item] = frozenset()
         self._activation_hint = activation_hint
 
         self.setColumnCount(2)
@@ -301,7 +409,42 @@ class NetItemsTable(QtWidgets.QTableWidget):
                 self.setItem(row, 1, amount_item)
         finally:
             self._rendering = False
+        self._apply_highlights()
         self.resizeRowsToContents()
+
+    def highlight_items(self, items: cabc.Iterable[ic.Item]) -> None:
+        self._highlighted_items = frozenset(items)
+        self._apply_highlights()
+
+    def refresh_appearance(self) -> None:
+        self._apply_highlights()
+        self.resizeRowsToContents()
+
+    def _apply_highlights(self) -> None:
+        highlight_background = self.palette().brush(QtGui.QPalette.ColorRole.Highlight)
+        highlight_foreground = self.palette().brush(
+            QtGui.QPalette.ColorRole.HighlightedText
+        )
+        blocker = QtCore.QSignalBlocker(self)
+        try:
+            for row in range(self.rowCount()):
+                for column in range(self.columnCount()):
+                    table_item = self.item(row, column)
+                    if table_item is None:
+                        continue
+                    item = table_item.data(QtCore.Qt.ItemDataRole.UserRole)
+                    highlighted = item in self._highlighted_items
+                    table_item.setBackground(
+                        highlight_background if highlighted else QtGui.QBrush()
+                    )
+                    table_item.setForeground(
+                        highlight_foreground if highlighted else QtGui.QBrush()
+                    )
+                    font = table_item.font()
+                    font.setBold(highlighted)
+                    table_item.setFont(font)
+        finally:
+            del blocker
 
     def _handle_item_changed(self, table_item: QtWidgets.QTableWidgetItem) -> None:
         if self._rendering or table_item.column() != 1:
@@ -349,14 +492,25 @@ class RecipeDetailsView(QtWidgets.QScrollArea):
             QtWidgets.QSizePolicy.Policy.Expanding,
             QtWidgets.QSizePolicy.Policy.Expanding,
         )
+        self._cards: dict[ic.Recipe, QtWidgets.QGroupBox] = {}
+        self._selected_recipe: ic.Recipe | None = None
+        self._scroll_timer = QtCore.QTimer(self)
+        self._scroll_timer.setSingleShot(True)
+        self._scroll_timer.timeout.connect(self._scroll_to_selected_recipe)
 
     def set_view(self, recipes: RecipeCounts) -> None:
         self.clear()
         for recipe, count in recipes:
-            self.content_layout.addWidget(self._make_card(recipe, count))
+            card = self._make_card(recipe, count)
+            self._cards[recipe] = card
+            self.content_layout.addWidget(card)
         self.content_layout.addStretch()
+        if self._selected_recipe not in self._cards:
+            self._selected_recipe = None
+        self._refresh_card_highlights()
 
     def clear(self) -> None:
+        self._cards.clear()
         while self.content_layout.count():
             layout_item = self.content_layout.takeAt(0)
             if layout_item is None:
@@ -364,6 +518,45 @@ class RecipeDetailsView(QtWidgets.QScrollArea):
             widget = layout_item.widget()
             if widget is not None:
                 widget.deleteLater()
+
+    def focus_recipe(self, recipe: ic.Recipe | None, *, scroll: bool = True) -> None:
+        self._selected_recipe = recipe if recipe in self._cards else None
+        self._refresh_card_highlights()
+        if scroll and self._selected_recipe is not None:
+            self._scroll_timer.start(0)
+
+    def refresh_appearance(self) -> None:
+        self._refresh_card_highlights()
+
+    def _scroll_to_selected_recipe(self) -> None:
+        if self._selected_recipe is None:
+            return
+        card = self._cards.get(self._selected_recipe)
+        if card is not None:
+            self.ensureWidgetVisible(card, 0, 12)
+
+    def _refresh_card_highlights(self) -> None:
+        highlight = self.palette().color(QtGui.QPalette.ColorRole.Highlight)
+        selected_stylesheet = (
+            "QGroupBox {"
+            f"border: 3px solid rgb({highlight.red()}, {highlight.green()}, "
+            f"{highlight.blue()});"
+            "border-radius: 6px;"
+            "margin-top: 0.7em;"
+            f"background-color: rgba({highlight.red()}, {highlight.green()}, "
+            f"{highlight.blue()}, 36);"
+            "font-weight: 700;"
+            "}"
+            "QGroupBox::title {"
+            "subcontrol-origin: margin;"
+            "left: 8px;"
+            "padding: 0 4px;"
+            "}"
+        )
+        for recipe, card in self._cards.items():
+            selected = recipe is self._selected_recipe
+            card.setProperty("selectedRecipe", selected)
+            card.setStyleSheet(selected_stylesheet if selected else "")
 
     @staticmethod
     def _make_card(
@@ -417,11 +610,35 @@ class ChainDetailsTabs(QtWidgets.QTabWidget):
         inputs: ItemRates,
         outputs: ItemRates,
         recipes: RecipeCounts,
+        selected_recipe: ic.Recipe | None = None,
     ) -> None:
         self.inputs_table.set_view(inputs)
         self.outputs_table.set_view(outputs)
         self.recipe_details.set_view(recipes)
+        self.focus_recipe(
+            selected_recipe,
+            scroll=self.currentWidget() is self.recipe_details,
+        )
+
+    def focus_recipe(
+        self,
+        recipe: ic.Recipe | None,
+        *,
+        scroll: bool = True,
+    ) -> None:
+        related_items = (
+            frozenset((*recipe.inputs, *recipe.products))
+            if recipe is not None
+            else frozenset()
+        )
+        self.inputs_table.highlight_items(related_items)
+        self.outputs_table.highlight_items(related_items)
+        self.recipe_details.focus_recipe(
+            recipe,
+            scroll=scroll,
+        )
 
     def refresh_appearance(self) -> None:
-        self.inputs_table.resizeRowsToContents()
-        self.outputs_table.resizeRowsToContents()
+        self.inputs_table.refresh_appearance()
+        self.outputs_table.refresh_appearance()
+        self.recipe_details.refresh_appearance()

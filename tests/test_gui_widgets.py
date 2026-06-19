@@ -1,6 +1,6 @@
 import fractions as fr
 
-from PySide6 import QtWidgets
+from PySide6 import QtGui, QtWidgets
 import pytestqt.qtbot
 
 from satisfactory_recipes import info_classes as ic
@@ -80,6 +80,8 @@ def test_recipes_panel_renders_and_emits_recipe_actions(
     panel = widgets.RecipesPanel()
     qtbot.addWidget(panel)
     removed: list[ic.Recipe] = []
+    selected: list[ic.Recipe | None] = []
+    count_edits: list[tuple[ic.Recipe, fr.Fraction]] = []
     goal_requests = 0
     shortage_requests = 0
 
@@ -96,6 +98,10 @@ def test_recipes_panel_renders_and_emits_recipe_actions(
         shortage_requests += 1
 
     panel.remove_recipe_requested.connect(record_removal)
+    panel.recipe_selected.connect(selected.append)
+    panel.recipe_count_edit_requested.connect(
+        lambda edited_recipe, count: count_edits.append((edited_recipe, count))
+    )
     panel.add_goal_recipe_requested.connect(record_goal_request)
     panel.add_shortage_recipe_requested.connect(record_shortage_request)
     panel.set_view(
@@ -113,8 +119,16 @@ def test_recipes_panel_renders_and_emits_recipe_actions(
     assert mean_power.text() == "12.000 MW"
     count = panel.table.item(0, 2)
     assert count is not None
-    assert count.toolTip() == "Exact: 3"
+    assert count.toolTip().startswith("Exact: 3")
     assert mean_power.toolTip() == "Exact: 12 MW"
+
+    panel.table.selectRow(0)
+    assert selected == [recipe]
+    count_item = panel.table.item(0, 2)
+    assert count_item is not None
+    assert "Double-click" in count_item.toolTip()
+    count_item.setText("7/3")
+    assert count_edits == [(recipe, fr.Fraction(7, 3))]
 
     panel.add_goal_recipe_button.click()
     panel.add_shortage_recipe_button.click()
@@ -171,7 +185,7 @@ def test_net_items_table_renders_without_edit_signal_and_emits_exact_amount(
 def test_chain_details_tabs_renders_all_views_and_forwards_shortage_request(
     qtbot: pytestqt.qtbot.QtBot,
 ) -> None:
-    ore, ingot, _recipe, chain = make_widget_scenario()
+    ore, ingot, recipe, chain = make_widget_scenario()
     tabs = widgets.ChainDetailsTabs()
     qtbot.addWidget(tabs)
     shortages: list[ic.Item] = []
@@ -199,6 +213,22 @@ def test_chain_details_tabs_renders_all_views_and_forwards_shortage_request(
     assert "add a recipe" in input_name.toolTip()
     assert "Double-click" in tabs.tabToolTip(0)
     assert tabs.recipe_details.content_layout.count() == 2
+
+    tabs.focus_recipe(recipe)
+
+    assert tabs.currentWidget() is tabs.inputs_table
+    assert input_name.font().bold()
+    assert output_name.font().bold()
+    assert input_name.background().color() == tabs.inputs_table.palette().color(
+        QtGui.QPalette.ColorRole.Highlight
+    )
+    selected_cards = [
+        card
+        for card in tabs.recipe_details.content_widget.findChildren(QtWidgets.QGroupBox)
+        if card.property("selectedRecipe")
+    ]
+    assert len(selected_cards) == 1
+    assert selected_cards[0].title().startswith(recipe.name)
 
     tabs.inputs_table.itemDoubleClicked.emit(input_name)
 

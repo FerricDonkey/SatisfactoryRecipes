@@ -189,6 +189,31 @@ def test_window_renders_representative_chain(
     assert "Iron Plate" in detail_text
     assert "Produced in <b>Constructor</b>" in detail_text
 
+    window.recipes_panel.table.selectRow(0)
+
+    assert window.selected_recipe is gui_scenario.plate_recipe
+    assert window.chain_details.currentWidget() is window.chain_details.inputs_table
+    assert get_table_item(window.chain_details.inputs_table, 0, 0).font().bold()
+    assert get_table_item(window.chain_details.outputs_table, 0, 0).font().bold()
+    assert any(
+        card.property("selectedRecipe")
+        for card in window.chain_details.recipe_details.content_widget.findChildren(
+            QtWidgets.QGroupBox
+        )
+    )
+
+    count_item = get_table_item(window.recipes_panel.table, 0, 2)
+    count_item.setText("7/2")
+
+    qtbot.waitUntil(
+        lambda: (
+            gui_scenario.chain.recipes[gui_scenario.plate_recipe] == fr.Fraction(7, 2)
+        )
+    )
+    assert gui_scenario.chain.recipes[gui_scenario.plate_recipe] == fr.Fraction(7, 2)
+    assert window.has_unsaved_changes
+    assert get_table_item(window.chain_details.outputs_table, 0, 1).text() == "3.500"
+
 
 def test_recipe_actions_follow_available_shortages(
     qtbot: pytestqt.qtbot.QtBot,
@@ -206,6 +231,24 @@ def test_recipe_actions_follow_available_shortages(
 
     assert not window.add_shortage_recipe_action.isEnabled()
     assert not window.recipes_panel.add_shortage_recipe_button.isEnabled()
+
+
+def test_editing_recipe_count_scales_all_recipes(
+    qtbot: pytestqt.qtbot.QtBot,
+    gui_scenario: GuiScenario,
+) -> None:
+    gui_scenario.chain.recipes[gui_scenario.ingot_recipe] = fr.Fraction(6)
+    window = make_window(qtbot, gui_scenario, chain=gui_scenario.chain)
+
+    plate_count = get_table_item(window.recipes_panel.table, 1, 2)
+    plate_count.setText("6")
+
+    qtbot.waitUntil(
+        lambda: gui_scenario.chain.recipes[gui_scenario.plate_recipe] == fr.Fraction(6)
+    )
+    assert gui_scenario.chain.recipes[gui_scenario.plate_recipe] == fr.Fraction(6)
+    assert gui_scenario.chain.recipes[gui_scenario.ingot_recipe] == fr.Fraction(12)
+    assert window.has_unsaved_changes
 
 
 def test_refresh_computes_chain_view_state_once(

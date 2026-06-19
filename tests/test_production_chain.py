@@ -259,3 +259,35 @@ def test_scale_item_rejects_zero_target() -> None:
 
     with pytest.raises(ValueError, match="Not allowed to scale to 0"):
         chain.scale_item(item, fr.Fraction(0))
+
+
+def test_scale_recipe_count_scales_the_entire_chain() -> None:
+    ore = support.make_fake_item("Ore")
+    ingot = support.make_fake_item("Ingot")
+    plate = support.make_fake_item("Plate")
+    ingot_recipe = support.make_fake_recipe(
+        class_name="Recipe_Ingot_C",
+        name="Ingot",
+        inputs={ore: fr.Fraction(1)},
+        products={ingot: fr.Fraction(1)},
+    )
+    plate_recipe = support.make_fake_recipe(
+        class_name="Recipe_Plate_C",
+        name="Plate",
+        inputs={ingot: fr.Fraction(1)},
+        products={plate: fr.Fraction(1)},
+    )
+    chain = pc.ProductionChain(
+        goal=plate,
+        recipes=sc.ScalableCounter(
+            {
+                ingot_recipe: fr.Fraction(6),
+                plate_recipe: fr.Fraction(3),
+            }
+        ),
+    )
+
+    chain.scale_recipe_count(plate_recipe, fr.Fraction(7, 2))
+
+    assert chain.recipes[plate_recipe] == fr.Fraction(7, 2)
+    assert chain.recipes[ingot_recipe] == fr.Fraction(7)
