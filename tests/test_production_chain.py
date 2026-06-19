@@ -33,10 +33,12 @@ def test_production_chain_save_load_round_trips(tmp_path: pathlib.Path) -> None:
 
     chain = pc.ProductionChain(
         goal=plate,
-        recipes=sc.ScalableCounter[ic.Recipe]({
-            ingot_recipe: fr.Fraction(3, 2),
-            plate_recipe: fr.Fraction(4),
-        }),
+        recipes=sc.ScalableCounter[ic.Recipe](
+            {
+                ingot_recipe: fr.Fraction(3, 2),
+                plate_recipe: fr.Fraction(4),
+            }
+        ),
     )
 
     filename = tmp_path / "chain.json"

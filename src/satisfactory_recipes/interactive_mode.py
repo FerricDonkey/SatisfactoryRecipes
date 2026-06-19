@@ -349,6 +349,7 @@ class InteractiveRunner:
         "load": load,
     }
 
+
 if __name__ == "__main__":
     from satisfactory_recipes import main
 

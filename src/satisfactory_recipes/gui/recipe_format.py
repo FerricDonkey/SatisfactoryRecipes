@@ -50,8 +50,7 @@ def recipe_body_html(recipe: ic.Recipe, count: fr.Fraction) -> str:
 
 
 def recipe_details_document_html(recipe_blocks: list[str]) -> str:
-    return (
-        """
+    return """
         <style>
           body {
             font-family: sans-serif;
@@ -86,6 +85,4 @@ def recipe_details_document_html(recipe_blocks: list[str]) -> str:
             margin-top: 8px;
           }
         </style>
-        """
-        + "\n".join(recipe_blocks)
-    )
+        """ + "\n".join(recipe_blocks)

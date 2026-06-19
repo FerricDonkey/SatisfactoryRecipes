@@ -156,12 +156,7 @@ def get_common_docs_paths() -> list[pathlib.Path]:
             / "steamapps"
             / "common"
             / "Satisfactory",
-            root
-            / "Program Files"
-            / "Steam"
-            / "steamapps"
-            / "common"
-            / "Satisfactory",
+            root / "Program Files" / "Steam" / "steamapps" / "common" / "Satisfactory",
         ]
         paths.extend(docs_path_from_game_path(path) for path in candidates)
 

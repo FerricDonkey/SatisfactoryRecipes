@@ -34,10 +34,12 @@ class AppearanceManager(QtCore.QObject):
         self.zoom_in_action = QtGui.QAction("Zoom In", self)
         self.zoom_out_action = QtGui.QAction("Zoom Out", self)
         self.reset_zoom_action = QtGui.QAction("Reset Zoom", self)
-        self.zoom_in_action.setShortcuts([
-            QtGui.QKeySequence(QtGui.QKeySequence.StandardKey.ZoomIn),
-            QtGui.QKeySequence("Ctrl+="),
-        ])
+        self.zoom_in_action.setShortcuts(
+            [
+                QtGui.QKeySequence(QtGui.QKeySequence.StandardKey.ZoomIn),
+                QtGui.QKeySequence("Ctrl+="),
+            ]
+        )
         self.zoom_out_action.setShortcut(QtGui.QKeySequence.StandardKey.ZoomOut)
         self.reset_zoom_action.setShortcut(QtGui.QKeySequence("Ctrl+0"))
         self.zoom_in_action.triggered.connect(self.zoom_in)

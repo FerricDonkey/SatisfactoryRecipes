@@ -203,10 +203,12 @@ class ProductionChain:
 
         return cls(
             goal=game_data.items_d[saveable.goal_class_name],
-            recipes=sc.ScalableCounter({
-                game_data.recipes_d[recipe]: count
-                for recipe, count in saveable.recipes.items()
-            }),
+            recipes=sc.ScalableCounter(
+                {
+                    game_data.recipes_d[recipe]: count
+                    for recipe, count in saveable.recipes.items()
+                }
+            ),
         )
 
     def save(self, filename: pathlib.Path, scale: fr.Fraction) -> None:

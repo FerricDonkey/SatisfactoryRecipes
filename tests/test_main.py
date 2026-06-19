@@ -118,7 +118,9 @@ def test_run_gui_defers_docs_resolution_to_gui_app(
             "1/2",
         ]
     )
-    calls: list[tuple[pathlib.Path | None, pathlib.Path | None, pathlib.Path | None]] = []
+    calls: list[
+        tuple[pathlib.Path | None, pathlib.Path | None, pathlib.Path | None]
+    ] = []
 
     def fake_gui_main(
         *,
