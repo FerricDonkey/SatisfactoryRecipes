@@ -1,17 +1,19 @@
 """User configuration and Satisfactory docs discovery."""
 
 import collections.abc as cabc
-import typing as ty
 import pathlib
 import string
 import sys
+import typing as ty
 
 import platformdirs as pfd
 import pydantic
 
 APP_NAME = "satisfactory-recipes"
 CONFIG_FILENAME = "config.json"
-DOCS_RELATIVE_PATH = pathlib.Path("CommunityResources") / "Docs" / "en-us.json"
+DOCS_DIRECTORY = pathlib.Path("CommunityResources") / "Docs"
+DOCS_FILENAMES = ("en-US.json", "en-us.json")
+DOCS_RELATIVE_PATH = DOCS_DIRECTORY / DOCS_FILENAMES[0]
 
 type WarnFunc = cabc.Callable[[str], None]
 
@@ -98,11 +100,22 @@ def save_config(
 
 
 def docs_path_from_game_path(game_path: pathlib.Path) -> pathlib.Path:
+    for docs_path in docs_paths_from_game_path(game_path):
+        if docs_path.is_file():
+            return docs_path
     return game_path / DOCS_RELATIVE_PATH
 
 
+def docs_paths_from_game_path(
+    game_path: pathlib.Path,
+) -> cabc.Iterator[pathlib.Path]:
+    for filename in DOCS_FILENAMES:
+        yield game_path / DOCS_DIRECTORY / filename
+
+
 def is_valid_docs_path(docs_path: pathlib.Path) -> bool:
-    return docs_path.expanduser().is_file() and docs_path.name == "en-us.json"
+    docs_path = docs_path.expanduser()
+    return docs_path.is_file() and docs_path.name.casefold() == "en-us.json"
 
 
 def is_valid_game_path(game_path: pathlib.Path) -> bool:
@@ -144,23 +157,80 @@ def discard_invalid_paths(
     ), changed
 
 
-def get_common_docs_paths() -> list[pathlib.Path]:
-    paths: list[pathlib.Path] = []
-    for drive in string.ascii_uppercase:
-        root = pathlib.Path(f"{drive}:/")
-        candidates = [
-            root / "SteamLibrary" / "steamapps" / "common" / "Satisfactory",
-            root
-            / "Program Files (x86)"
-            / "Steam"
-            / "steamapps"
-            / "common"
-            / "Satisfactory",
-            root / "Program Files" / "Steam" / "steamapps" / "common" / "Satisfactory",
-        ]
-        paths.extend(docs_path_from_game_path(path) for path in candidates)
+def _game_paths_below_root(root: pathlib.Path) -> cabc.Iterator[pathlib.Path]:
+    yield root / "SteamLibrary" / "steamapps" / "common" / "Satisfactory"
+    yield (
+        root / "Program Files (x86)" / "Steam" / "steamapps" / "common" / "Satisfactory"
+    )
+    yield (root / "Program Files" / "Steam" / "steamapps" / "common" / "Satisfactory")
 
-    return paths
+    for install_name in (
+        "Satisfactory",
+        "SatisfactoryEarlyAccess",
+        "SatisfactoryExperimental",
+    ):
+        yield root / "Program Files" / "Epic Games" / install_name
+        yield root / "Program Files (x86)" / "Epic Games" / install_name
+        yield root / "Epic Games" / install_name
+
+
+def _common_game_paths() -> cabc.Iterator[pathlib.Path]:
+    home = pathlib.Path.home()
+
+    # Native Linux Steam, Flatpak Steam, Heroic, and Lutris-style defaults.
+    yield home / ".local" / "share" / "Steam" / "steamapps" / "common" / "Satisfactory"
+    yield home / ".steam" / "steam" / "steamapps" / "common" / "Satisfactory"
+    yield (
+        home
+        / ".var"
+        / "app"
+        / "com.valvesoftware.Steam"
+        / ".local"
+        / "share"
+        / "Steam"
+        / "steamapps"
+        / "common"
+        / "Satisfactory"
+    )
+    yield home / "Games" / "satisfactory"
+    yield home / "Games" / "Satisfactory"
+
+    # Native macOS Steam and Epic locations.
+    yield (
+        home
+        / "Library"
+        / "Application Support"
+        / "Steam"
+        / "steamapps"
+        / "common"
+        / "Satisfactory"
+    )
+
+    install_names = (
+        "Satisfactory",
+        "SatisfactoryEarlyAccess",
+        "SatisfactoryExperimental",
+    )
+    for install_name in install_names:
+        yield home / "Games" / "Heroic" / install_name
+        yield pathlib.Path("/Users/Shared/Epic Games") / install_name
+        yield home / "Library" / "Application Support" / "Epic Games" / install_name
+
+    # Check every drive using Windows, Git Bash, and WSL spellings. Deliberately
+    # do not infer which environment is active; nonexistent paths are harmless.
+    drive_letters = "C" + string.ascii_uppercase.replace("C", "")
+    for drive in drive_letters:
+        for root in (
+            pathlib.Path(f"{drive}:/"),
+            pathlib.Path(f"/{drive.lower()}"),
+            pathlib.Path(f"/mnt/{drive.lower()}"),
+        ):
+            yield from _game_paths_below_root(root)
+
+
+def get_common_docs_paths() -> cabc.Iterator[pathlib.Path]:
+    for game_path in _common_game_paths():
+        yield from docs_paths_from_game_path(game_path)
 
 
 def find_docs_path() -> pathlib.Path | None:

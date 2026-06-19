@@ -1,3 +1,4 @@
+import collections.abc as cabc
 import json
 import pathlib
 
@@ -54,6 +55,47 @@ def test_resolve_docs_path_uses_configured_game_path(
     assert resolved == docs_path
 
 
+@pytest.mark.parametrize("filename", sr_config.DOCS_FILENAMES)
+def test_docs_path_from_game_path_accepts_filename_case_variants(
+    tmp_path: pathlib.Path,
+    filename: str,
+) -> None:
+    docs_path = tmp_path / sr_config.DOCS_DIRECTORY / filename
+    docs_path.parent.mkdir(parents=True)
+    docs_path.write_text("[]")
+
+    assert sr_config.docs_path_from_game_path(tmp_path) == docs_path
+    assert sr_config.is_valid_docs_path(docs_path)
+
+
+def test_get_common_docs_paths_generates_cross_platform_candidates() -> None:
+    paths = set(sr_config.get_common_docs_paths())
+
+    expected_game_paths = {
+        pathlib.Path("C:/SteamLibrary/steamapps/common/Satisfactory"),
+        pathlib.Path("/c/Program Files/Epic Games/SatisfactoryEarlyAccess"),
+        pathlib.Path("/mnt/c/Program Files/Epic Games/SatisfactoryExperimental"),
+        pathlib.Path.home()
+        / ".local"
+        / "share"
+        / "Steam"
+        / "steamapps"
+        / "common"
+        / "Satisfactory",
+        pathlib.Path.home()
+        / "Library"
+        / "Application Support"
+        / "Steam"
+        / "steamapps"
+        / "common"
+        / "Satisfactory",
+        pathlib.Path("/Users/Shared/Epic Games/Satisfactory"),
+    }
+    for game_path in expected_game_paths:
+        for filename in sr_config.DOCS_FILENAMES:
+            assert game_path / sr_config.DOCS_DIRECTORY / filename in paths
+
+
 def test_resolve_docs_path_discards_stale_paths_and_saves_clean_config(
     tmp_path: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -97,8 +139,8 @@ def test_resolve_docs_path_finds_and_saves_discovered_path(
     config_path = tmp_path / "config.json"
     docs_path = make_docs_file(tmp_path / "game")
 
-    def fake_get_common_docs_paths() -> list[pathlib.Path]:
-        return [docs_path]
+    def fake_get_common_docs_paths() -> cabc.Iterator[pathlib.Path]:
+        yield docs_path
 
     monkeypatch.setattr(
         sr_config,
