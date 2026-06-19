@@ -1,5 +1,7 @@
 """Consistent readable and exact formatting for GUI fraction values."""
 
+from __future__ import annotations
+
 import fractions as fr
 
 

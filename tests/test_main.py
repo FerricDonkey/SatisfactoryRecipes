@@ -8,17 +8,17 @@ from satisfactory_recipes.gui import app as gui_app
 from satisfactory_recipes import main
 
 
-def test_parser_defaults_to_cli() -> None:
+def test_parser_defaults_to_gui() -> None:
     args = main.make_parser().parse_args([])
 
-    assert args.command == "cli"
+    assert args.command == "gui"
     assert args.filename is None
     assert args.scale == fr.Fraction(1, 1)
     assert args.docs_path is None
     assert args.game_path is None
 
 
-def test_parser_supports_legacy_cli_options_without_subcommand() -> None:
+def test_parser_supports_gui_options_without_subcommand() -> None:
     args = main.make_parser().parse_args(
         [
             "--infile",
@@ -30,7 +30,7 @@ def test_parser_supports_legacy_cli_options_without_subcommand() -> None:
         ]
     )
 
-    assert args.command == "cli"
+    assert args.command == "gui"
     assert args.filename == pathlib.Path("chain.json")
     assert args.scale == fr.Fraction(1, 4)
     assert args.docs_path == pathlib.Path("en-us.json")
@@ -100,6 +100,27 @@ def test_dispatch_runs_gui(monkeypatch: pytest.MonkeyPatch) -> None:
     main.dispatch(args)
 
     assert calls == [args]
+
+
+def test_dispatch_runs_deployment_smoke_test(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    args = main.make_parser().parse_args(["--deployment-smoke-test"])
+    calls = 0
+
+    def fake_smoke_test() -> None:
+        nonlocal calls
+        calls += 1
+
+    monkeypatch.setattr(main, "run_deployment_smoke_test", fake_smoke_test)
+
+    main.dispatch(args)
+
+    assert calls == 1
+
+
+def test_deployment_smoke_test_constructs_gui() -> None:
+    gui_app.deployment_smoke_test()
 
 
 def test_run_gui_defers_docs_resolution_to_gui_app(

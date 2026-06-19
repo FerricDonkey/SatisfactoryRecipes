@@ -1,5 +1,7 @@
 """User configuration and Satisfactory docs discovery."""
 
+from __future__ import annotations
+
 import collections.abc as cabc
 import pathlib
 import string

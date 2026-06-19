@@ -2,6 +2,8 @@
 Contains basic classes for things like recipes, items, buildings
 """
 
+from __future__ import annotations
+
 import copy
 import dataclasses
 import enum

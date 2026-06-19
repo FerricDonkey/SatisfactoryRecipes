@@ -1,5 +1,7 @@
 """Application-wide GUI theme, style, and zoom management."""
 
+from __future__ import annotations
+
 import collections.abc as cabc
 import typing as ty
 

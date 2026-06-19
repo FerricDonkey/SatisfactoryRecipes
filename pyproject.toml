@@ -29,6 +29,11 @@ dev = [
     "pytest-qt>=4.5.0",
     "ruff>=0.15.17",
 ]
+deploy = [
+    "nuitka>=4.0",
+    "ordered-set>=4.1.0",
+    "zstandard>=0.23.0",
+]
 
 [tool.pyright]
 include = ["src", "tests"]

@@ -1,5 +1,7 @@
 """GUI application bootstrap."""
 
+from __future__ import annotations
+
 import fractions as fr
 import pathlib
 import sys
@@ -8,9 +10,29 @@ from PySide6 import QtCore, QtWidgets
 
 from satisfactory_recipes import config as sr_config
 from satisfactory_recipes import docs_parser
+from satisfactory_recipes import info_classes as ic
 from satisfactory_recipes import production_chain as pc
 from satisfactory_recipes.gui import dialogs
 from satisfactory_recipes.gui import main_window
+
+
+def deployment_smoke_test() -> None:
+    """Construct and briefly show the real main window without external data."""
+    app = QtWidgets.QApplication.instance()
+    if app is None:
+        app = QtWidgets.QApplication(["satisfactory-recipes-smoke-test"])
+
+    window = main_window.MainWindow(
+        docs_path=pathlib.Path("deployment-smoke-test-en-US.json"),
+        game_data=ic.GameData(buildings_d={}, items_d={}, recipes_d={}),
+        user_config=sr_config.Configuration(),
+    )
+    window.show()
+    app.processEvents()
+    if not window.isVisible():
+        raise RuntimeError("Deployment smoke-test window did not become visible")
+    window.close()
+    app.processEvents()
 
 
 def _resolve_docs_path_for_gui(

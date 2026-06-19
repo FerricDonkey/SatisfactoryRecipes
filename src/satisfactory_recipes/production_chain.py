@@ -2,6 +2,8 @@
 Actual production chain logic
 """
 
+from __future__ import annotations
+
 import dataclasses
 import fractions as fr
 import pathlib
@@ -169,7 +171,7 @@ class ProductionChain:
         amount = abs(amount)
         self.recipes *= fr.Fraction(amount, current_amount)
 
-    def to_saveable(self, scale: fr.Fraction) -> _ProductionChainSavable:
+    def to_saveable(self, scale: fr.Fraction) -> "_ProductionChainSavable":
         """Convert to a saveable format. It is the caller's responsibility to ensure scale is correct."""
         return _ProductionChainSavable(
             goal_class_name=self.goal.class_name,

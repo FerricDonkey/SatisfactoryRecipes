@@ -1,5 +1,7 @@
 """Application dialogs composed from reusable selection and input widgets."""
 
+from __future__ import annotations
+
 import dataclasses
 import enum
 import fractions as fr
@@ -235,7 +237,7 @@ class _SearchDialog[T](QtWidgets.QDialog):
         if amount is None and self.amount_input is not None:
             return
 
-        selected = ty.cast(T, selected_object)
+        selected = ty.cast("T", selected_object)
         self.selected_object = selected
         self.selected_amount_per_min = amount
         self._store_selected_object(selected)

@@ -1,5 +1,7 @@
 """Shared rich recipe formatting for GUI views."""
 
+from __future__ import annotations
+
 import fractions as fr
 import html
 

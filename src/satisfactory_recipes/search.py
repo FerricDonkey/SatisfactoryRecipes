@@ -1,5 +1,7 @@
 """Search and ranking helpers shared by CLI and GUI selection flows."""
 
+from __future__ import annotations
+
 import collections.abc as cabc
 
 

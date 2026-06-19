@@ -1,5 +1,7 @@
 """Parse Satisfactory documentation JSON into provenance-aware domain objects."""
 
+from __future__ import annotations
+
 import dataclasses
 import fractions as fr
 import json

@@ -1,5 +1,7 @@
 """Top-level coordination for GUI session state and user workflows."""
 
+from __future__ import annotations
+
 import fractions as fr
 import pathlib
 

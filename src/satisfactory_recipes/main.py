@@ -1,5 +1,7 @@
 """Application entry point and top-level command line parsing."""
 
+from __future__ import annotations
+
 import argparse
 import fractions as fr
 import pathlib
@@ -77,7 +79,12 @@ def add_gui_args(
 def make_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Satisfactory recipe bookkeeping")
     add_docs_args(parser)
-    add_cli_args(parser)
+    add_gui_args(parser)
+    parser.add_argument(
+        "--deployment-smoke-test",
+        action="store_true",
+        help=argparse.SUPPRESS,
+    )
 
     subparsers = parser.add_subparsers(dest="command")
     cli_parser = subparsers.add_parser("cli", help="Launch the interactive CLI")
@@ -98,7 +105,7 @@ def make_parser() -> argparse.ArgumentParser:
     )
     gui_parser.set_defaults(command="gui")
 
-    parser.set_defaults(command="cli")
+    parser.set_defaults(command="gui")
 
     return parser
 
@@ -154,7 +161,17 @@ def run_gui(args: argparse.Namespace) -> None:
     )
 
 
+def run_deployment_smoke_test() -> None:
+    from satisfactory_recipes.gui import app as gui_app
+
+    gui_app.deployment_smoke_test()
+
+
 def dispatch(args: argparse.Namespace) -> None:
+    if args.deployment_smoke_test:
+        run_deployment_smoke_test()
+        return
+
     if args.command == "cli":
         run_cli(args)
         return

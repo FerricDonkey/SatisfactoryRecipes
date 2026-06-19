@@ -2,6 +2,8 @@
 Main entry point for running as a script
 """
 
+from __future__ import annotations
+
 from satisfactory_recipes import main as app_main
 
 

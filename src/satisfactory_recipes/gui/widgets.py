@@ -1,5 +1,7 @@
 """Data-driven widgets that display chain state and emit user intent."""
 
+from __future__ import annotations
+
 import collections.abc as cabc
 import fractions as fr
 import functools

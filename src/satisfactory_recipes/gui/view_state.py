@@ -1,5 +1,7 @@
 """Presentation data derived from the current production-chain session."""
 
+from __future__ import annotations
+
 import dataclasses
 import fractions as fr
 import pathlib

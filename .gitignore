@@ -41,6 +41,13 @@ MANIFEST
 #   before PyInstaller builds the exe, so as to inject date/other infos into it.
 *.manifest
 *.spec
+!pysidedeploy.spec
+
+# Nuitka / pyside6-deploy
+*.build/
+*.dist/
+*.onefile-build/
+src/satisfactory_recipes/deployment/
 
 # Installer logs
 pip-log.txt

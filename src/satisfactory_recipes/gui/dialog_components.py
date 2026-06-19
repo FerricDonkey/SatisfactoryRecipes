@@ -1,5 +1,7 @@
 """Reusable components for searchable selections and exact rate entry."""
 
+from __future__ import annotations
+
 import collections.abc as cabc
 import dataclasses
 import fractions as fr
@@ -95,7 +97,7 @@ class SearchableSelectionList[T](QtWidgets.QWidget):
 
     @staticmethod
     def _object_from_item(item: QtWidgets.QListWidgetItem) -> T:
-        return ty.cast(T, item.data(QtCore.Qt.ItemDataRole.UserRole))
+        return ty.cast("T", item.data(QtCore.Qt.ItemDataRole.UserRole))
 
 
 class PositiveFractionInput(QtWidgets.QWidget):

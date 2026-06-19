@@ -1,5 +1,7 @@
 """Some stupid helper classes that I shouldn't have to make."""
 
+from __future__ import annotations
+
 import collections
 import collections.abc as cabc
 import fractions
