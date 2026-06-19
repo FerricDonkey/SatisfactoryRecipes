@@ -1,7 +1,7 @@
 [project]
 name = "satisfactory-recipes"
 version = "0.2.0"
-description = "A calculator for "
+description = "A calculator for Satisfactory Recipes"
 readme = "README.md"
 authors = [
     { name = "Jacob Suggs", email = "jacob.suggs@gmail.com" }

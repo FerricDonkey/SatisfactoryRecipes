@@ -11,6 +11,39 @@ It will track how many machines (not accounting for over/under clocking) you nee
 
 The app works with the `en-us.json` documentation file installed with Satisfactory. It does not include or redistribute game data. It will attempt to locate this file automatically, but if it fails it will prompt you to point you at the location where you have installed the game or placed your copy of the file.
 
+## Installation
+
+### "You Don't Know or Care What Python Packages Are" Installation
+
+Download the project, unzip it to a folder, then run the installer script for your
+operating system:
+
+- Windows: double-click `install.ps1`, or run it from PowerShell.
+- Linux/mac: run `./install.sh` from a terminal.
+
+The installer downloads `uv` if needed, uses `uv` to install Python 3.14 if needed,
+installs the project dependencies, and creates a launcher script in the project
+folder. After installation, start the GUI by double clicking the new `.ps1` file for windows, or `.sh` file for linux/mac`.
+
+### "You Know What You're Doing" Installation
+
+If you already know your way around Python packaging, install Python 3.14 or newer
+and then install the project with `uv` or `pip`. If using pip and if you have not used uv before, you may need to first `pip install "uv_build>=0.9.17,<0.10.0"` (or you can install uv directly).
+
+```sh
+uv sync
+uv run sat-rec gui
+```
+
+With `pip`, create and activate a Python 3.14+ virtual environment, then install
+the project:
+
+```sh
+python -m pip install .
+sat-rec gui
+```
+
+
 ## Interfaces
 
 The project currently has both a GUI and an interactive CLI. The author was too lazy to make the gui himself, so had an AI do it.

@@ -1,7 +1,7 @@
 """Main GUI window."""
 
-import functools
 import fractions as fr
+import functools
 import pathlib
 import typing as ty
 
