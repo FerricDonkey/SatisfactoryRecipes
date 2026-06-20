@@ -21,6 +21,12 @@ class SelectionOption[T]:
     subtitle: str = ""
 
 
+def _default_selection_sort_key[T](
+    option: SelectionOption[T],
+) -> tuple[bool, str]:
+    return False, option.label.casefold()
+
+
 class SearchableSelectionList[T](QtWidgets.QWidget):
     """A searchable single-selection list carrying arbitrary Python objects."""
 
@@ -39,8 +45,12 @@ class SearchableSelectionList[T](QtWidgets.QWidget):
     ) -> None:
         super().__init__(parent)
         self._options = tuple(options)
-        self._unfiltered_sort_key = unfiltered_sort_key or (
-            lambda option: (False, option.label.casefold())
+        self._unfiltered_sort_key: cabc.Callable[
+            [SelectionOption[T]], tuple[bool, str]
+        ] = (
+            unfiltered_sort_key
+            if unfiltered_sort_key is not None
+            else _default_selection_sort_key
         )
 
         self.search_edit = QtWidgets.QLineEdit()

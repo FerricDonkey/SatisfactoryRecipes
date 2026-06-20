@@ -97,11 +97,14 @@ def test_recipes_panel_renders_and_emits_recipe_actions(
         nonlocal shortage_requests
         shortage_requests += 1
 
+    def record_count_edit(edited_recipe: object, count: object) -> None:
+        assert isinstance(edited_recipe, ic.Recipe)
+        assert isinstance(count, fr.Fraction)
+        count_edits.append((edited_recipe, count))
+
     panel.remove_recipe_requested.connect(record_removal)
     panel.recipe_selected.connect(selected.append)
-    panel.recipe_count_edit_requested.connect(
-        lambda edited_recipe, count: count_edits.append((edited_recipe, count))
-    )
+    panel.recipe_count_edit_requested.connect(record_count_edit)
     panel.add_goal_recipe_requested.connect(record_goal_request)
     panel.add_shortage_recipe_requested.connect(record_shortage_request)
     panel.set_view(

@@ -37,7 +37,7 @@ plugins =
 [nuitka]
 macos.permissions = 
 mode = onefile
-extra_args = --noinclude-qt-translations --windows-console-mode=force
+extra_args = --noinclude-qt-translations --windows-console-mode=force --assume-yes-for-downloads
 
 # --quiet --noinclude-qt-translations --windows-console-mode = disable
 
