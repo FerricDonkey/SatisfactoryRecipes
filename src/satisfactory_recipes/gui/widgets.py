@@ -650,7 +650,7 @@ class ChainDetailsTabs(QtWidgets.QTabWidget):
         *,
         scroll: bool = True,
     ) -> None:
-        related_items = (
+        related_items: frozenset[ic.Item] = (
             frozenset((*recipe.inputs, *recipe.products))
             if recipe is not None
             else frozenset()
