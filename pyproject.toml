@@ -1,0 +1,40 @@
+[project]
+name = "satisfactory-recipes"
+version = "0.2.0"
+description = "A calculator for Satisfactory Recipes"
+readme = "README.md"
+authors = [
+    { name = "Jacob Suggs", email = "jacob.suggs@gmail.com" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "platformdirs>=4.10.0",
+    "pydantic>=2.13.4",
+    "pyside6>=6.11.1",
+]
+
+[project.scripts]
+sat-rec = "satisfactory_recipes.__main__:main"
+
+[build-system]
+requires = ["uv_build>=0.9.17,<0.10.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "ipython>=9.14.1",
+    "mypy>=2.1.0",
+    "pyright[nodejs]>=1.1.410",
+    "pytest>=9.1.0",
+    "pytest-qt>=4.5.0",
+    "ruff>=0.15.17",
+]
+deploy = [
+    "nuitka>=4.0",
+    "ordered-set>=4.1.0",
+    "zstandard>=0.23.0",
+]
+
+[tool.pyright]
+include = ["src", "tests"]
+typeCheckingMode = "strict"
