@@ -20,6 +20,8 @@ Recipes etc are read from game files that YOU must provide, but the program trie
 
 ### "Sweaty nerds, where exe" Installation
 
+**This is currently a lie, but it will be true soon TM.**
+
 Download and use the exe. There's a release button somewhere on the right, probably, unless they moved it. Windows will yell at you and tell you it's unsigned and so might be unsafe. It's not, probably, unless I got supply-chained, but it's up to you if you trust that. If you don't like that, follow the below procedures. They're not any safer, but they might feel like they are.
 
 This works on windows because that's all I did. Find some other sweaty nerd to convert it to executables for your OS, if you want.
