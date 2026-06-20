@@ -96,24 +96,6 @@ class AppearanceManager(QtCore.QObject):
             action.triggered.connect(self._handle_style_action)
             self.style_action_group.addAction(action)
 
-        # self.font_action_group = QtGui.QActionGroup(self)
-        # self.font_action_group.setExclusive(True)
-        # automatic_font_action = QtGui.QAction(
-        #     f"Automatic ({self._automatic_font_family})",
-        #     self,
-        # )
-        # automatic_font_action.setCheckable(True)
-        # automatic_font_action.setChecked(True)
-        # automatic_font_action.setData("")
-        # automatic_font_action.triggered.connect(self._handle_font_action)
-        # self.font_action_group.addAction(automatic_font_action)
-        # for font_family in self._available_font_families:
-        #     action = QtGui.QAction(font_family, self)
-        #     action.setCheckable(True)
-        #     action.setData(font_family)
-        #     action.setFont(QtGui.QFont(font_family))
-        #     action.triggered.connect(self._handle_font_action)
-        #     self.font_action_group.addAction(action)
         self.use_automatic_font_action = QtGui.QAction(
             f"Use Automatic Font ({self._automatic_font_family})",
             self,
@@ -142,10 +124,6 @@ class AppearanceManager(QtCore.QObject):
     def automatic_font_family(self) -> str:
         return self._automatic_font_family
 
-    # def populate_view_menu(self, view_menu: QtWidgets.QMenu) -> None:
-    #     font_menu = QtWidgets.QMenu("Font", view_menu)
-    #     view_menu.addMenu(font_menu)
-    #     font_menu.addActions(self.font_action_group.actions())
     def populate_view_menu(self, view_menu: QtWidgets.QMenu) -> None:
         font_menu = QtWidgets.QMenu("Font", view_menu)
         view_menu.addMenu(font_menu)
@@ -212,8 +190,6 @@ class AppearanceManager(QtCore.QObject):
             actual_font = available_fonts.get(saved_font.casefold())
             if actual_font is None:
                 self._use_qt_default_font()
-                self._save_callback()
-                self._use_qt_default_font()
             else:
                 self.set_font_family(actual_font, persist=False)
 
@@ -263,7 +239,7 @@ class AppearanceManager(QtCore.QObject):
             return
 
         self._update_font_actions()
-        # self._check_action_by_data(self.theme_action_group, theme_name)
+        self._check_action_by_data(self.theme_action_group, theme_name)
         if persist:
             self.configuration.gui_theme = theme_name
             self._save_callback()
@@ -330,16 +306,6 @@ class AppearanceManager(QtCore.QObject):
         style_name = action.data()
         if isinstance(style_name, str):
             self.set_style(style_name)
-
-    # def _handle_font_action(self) -> None:
-    #     action = self.sender()
-    #     if not isinstance(action, QtGui.QAction):
-    #         return
-    #     font_family = action.data()
-    #     if font_family == "":
-    #         self.set_font_family(None)
-    #     elif isinstance(font_family, str):
-    #         self.set_font_family(font_family)
 
     def _choose_automatic_font_family(self) -> str:
         available_fonts = {
@@ -630,6 +596,7 @@ class AppearanceManager(QtCore.QObject):
             }
         """
 
+
 class _FontFamilyDialog(QtWidgets.QDialog):
     def __init__(
         self,
@@ -647,6 +614,7 @@ class _FontFamilyDialog(QtWidgets.QDialog):
         layout.addWidget(QtWidgets.QLabel("Font family:"))
 
         self.font_box = QtWidgets.QFontComboBox(self)
+        self.font_box.setFontFilters(QtWidgets.QFontComboBox.FontFilter.ScalableFonts)
         self.font_box.setCurrentFont(QtGui.QFont(current_family))
         layout.addWidget(self.font_box)
 

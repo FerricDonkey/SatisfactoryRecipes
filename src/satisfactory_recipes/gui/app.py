@@ -15,7 +15,7 @@ from satisfactory_recipes import production_chain as pc
 from satisfactory_recipes.gui import dialogs
 from satisfactory_recipes.gui import main_window
 
-
+# Some installed legacy fonts make Qt emit noisy warnings merely while enumerating them.
 QtCore.QLoggingCategory.setFilterRules("qt.qpa.fonts.warning=false")
 
 

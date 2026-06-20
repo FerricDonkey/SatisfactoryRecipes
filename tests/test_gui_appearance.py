@@ -1,4 +1,4 @@
-from PySide6 import QtGui, QtWidgets
+from PySide6 import QtCore, QtGui, QtWidgets
 import pytestqt.qtbot
 
 from satisfactory_recipes import config as sr_config
@@ -162,6 +162,68 @@ def test_unavailable_saved_font_uses_qt_default_without_losing_preference(
         assert qapp.font().family() == original_font.family()
         assert configuration.gui_font_family == unavailable_font
         assert save_count == 0
+    finally:
+        qapp.setFont(original_font)
+
+
+def test_font_picker_accepts_cancels_and_restores_automatic_font(
+    qapp: QtWidgets.QApplication,
+) -> None:
+    original_font = QtGui.QFont(qapp.font())
+    configuration = sr_config.Configuration()
+    save_count = 0
+
+    def record_save() -> None:
+        nonlocal save_count
+        save_count += 1
+
+    manager = appearance.AppearanceManager(
+        configuration=configuration,
+        save_callback=record_save,
+    )
+    selected_font = next(
+        family
+        for family in QtGui.QFontDatabase.families()
+        if QtGui.QFontDatabase.isSmoothlyScalable(family)
+    )
+
+    def cancel_picker() -> None:
+        dialog = qapp.activeModalWidget()
+        assert isinstance(dialog, QtWidgets.QDialog)
+        font_box = dialog.findChild(QtWidgets.QFontComboBox)
+        assert font_box is not None
+        assert font_box.fontFilters() & QtWidgets.QFontComboBox.FontFilter.ScalableFonts
+        dialog.reject()
+
+    def accept_picker() -> None:
+        dialog = qapp.activeModalWidget()
+        assert isinstance(dialog, QtWidgets.QDialog)
+        font_box = dialog.findChild(QtWidgets.QFontComboBox)
+        assert font_box is not None
+        font_box.setCurrentFont(QtGui.QFont(selected_font))
+        dialog.accept()
+
+    try:
+        QtCore.QTimer.singleShot(0, cancel_picker)
+        manager.choose_font_action.trigger()
+
+        assert configuration.gui_font_family is None
+        assert save_count == 0
+
+        QtCore.QTimer.singleShot(0, accept_picker)
+        manager.choose_font_action.trigger()
+
+        assert configuration.gui_font_family == selected_font
+        assert manager.font_family == selected_font
+        assert manager.current_font_action.text() == f"Current: {selected_font}"
+        assert save_count == 1
+
+        manager.use_automatic_font_action.trigger()
+
+        assert configuration.gui_font_family is None
+        assert manager.font_family == manager.automatic_font_family
+        assert manager.current_font_action.text().endswith("(automatic)")
+        assert save_count == 2
     finally:
         qapp.setFont(original_font)
 
