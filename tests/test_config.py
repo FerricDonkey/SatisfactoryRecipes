@@ -126,6 +126,7 @@ def test_resolve_docs_path_discards_stale_paths_and_saves_clean_config(
         "game_path": None,
         "gui_theme": "system",
         "gui_style": None,
+        "gui_font_family": None,
         "gui_zoom_steps": 0,
     }
     assert any("Configured docs_path" in warning for warning in warnings)

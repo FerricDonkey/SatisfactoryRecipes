@@ -1,6 +1,6 @@
 import fractions as fr
 
-from PySide6 import QtGui, QtWidgets
+from PySide6 import QtCore, QtGui, QtWidgets
 import pytestqt.qtbot
 
 from satisfactory_recipes import info_classes as ic
@@ -120,6 +120,8 @@ def test_recipes_panel_renders_and_emits_recipe_actions(
     count = panel.table.item(0, 2)
     assert count is not None
     assert count.toolTip().startswith("Exact: 3")
+    assert count.textAlignment() & QtCore.Qt.AlignmentFlag.AlignRight
+    assert mean_power.textAlignment() & QtCore.Qt.AlignmentFlag.AlignRight
     assert mean_power.toolTip() == "Exact: 12 MW"
 
     panel.table.selectRow(0)
@@ -171,8 +173,9 @@ def test_net_items_table_renders_without_edit_signal_and_emits_exact_amount(
     amount_item = table.item(0, 1)
     assert name_item is not None
     assert amount_item is not None
-    assert amount_item.text() == "1,666.667"
-    assert "Exact: 1,666 + 2/3" in amount_item.toolTip()
+    assert amount_item.text() == "1_666.667"
+    assert amount_item.textAlignment() & QtCore.Qt.AlignmentFlag.AlignRight
+    assert "Exact: 1_666 + 2/3" in amount_item.toolTip()
     assert "Double-click" in amount_item.toolTip()
 
     amount_item.setText("7/3")

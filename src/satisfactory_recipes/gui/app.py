@@ -16,6 +16,9 @@ from satisfactory_recipes.gui import dialogs
 from satisfactory_recipes.gui import main_window
 
 
+QtCore.QLoggingCategory.setFilterRules("qt.qpa.fonts.warning=false")
+
+
 def deployment_smoke_test() -> None:
     """Construct and briefly show the real main window without external data."""
     app = QtWidgets.QApplication.instance()

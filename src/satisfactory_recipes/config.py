@@ -33,6 +33,7 @@ class Configuration(pydantic.BaseModel):
     game_path: pathlib.Path | None = None
     gui_theme: ty.Literal["system", "light", "dark"] = "system"
     gui_style: str | None = None
+    gui_font_family: str | None = None
     gui_zoom_steps: int = 0
 
 

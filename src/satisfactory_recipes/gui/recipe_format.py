@@ -81,9 +81,6 @@ def recipe_exact_tooltip(recipe: ic.Recipe, count: fr.Fraction) -> str:
 def recipe_details_document_html(recipe_blocks: list[str]) -> str:
     return """
         <style>
-          body {
-            font-family: sans-serif;
-          }
           .recipe-card {
             border: 2px solid currentColor;
             border-radius: 6px;

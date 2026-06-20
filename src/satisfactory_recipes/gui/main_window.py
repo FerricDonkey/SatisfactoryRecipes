@@ -97,6 +97,8 @@ class MainWindow(QtWidgets.QMainWindow):
         view_menu.addAction(self.appearance_manager.zoom_in_action)
         view_menu.addAction(self.appearance_manager.zoom_out_action)
         view_menu.addAction(self.appearance_manager.reset_zoom_action)
+        view_menu.addSeparator()
+        self.appearance_manager.populate_view_menu(view_menu)
 
     def _setup_theme_actions(self) -> None:
         options_menu = self.menuBar().addMenu("Options")

@@ -26,6 +26,7 @@ class _ExactFractionDelegate(QtWidgets.QStyledItemDelegate):
         index: QtCore.QModelIndex | QtCore.QPersistentModelIndex,
     ) -> None:
         if isinstance(editor, QtWidgets.QLineEdit):
+            editor.setAlignment(QtCore.Qt.AlignmentFlag.AlignRight)
             exact_value = index.data(EXACT_VALUE_ROLE)
             if isinstance(exact_value, fr.Fraction):
                 editor.setText(str(exact_value))
@@ -164,6 +165,16 @@ class RecipesPanel(QtWidgets.QWidget):
         count_header = self.table.horizontalHeaderItem(2)
         if count_header is not None:
             count_header.setToolTip(self.COUNT_EDIT_HINT)
+            count_header.setTextAlignment(
+                QtCore.Qt.AlignmentFlag.AlignRight
+                | QtCore.Qt.AlignmentFlag.AlignVCenter
+            )
+        power_header = self.table.horizontalHeaderItem(4)
+        if power_header is not None:
+            power_header.setTextAlignment(
+                QtCore.Qt.AlignmentFlag.AlignRight
+                | QtCore.Qt.AlignmentFlag.AlignVCenter
+            )
         self.table.setToolTip(self.COUNT_EDIT_HINT)
         self.table.setItemDelegateForColumn(2, _ExactFractionDelegate(self.table))
 
@@ -219,6 +230,11 @@ class RecipesPanel(QtWidgets.QWidget):
                 )
                 for column, (value, tooltip) in enumerate(values, start=1):
                     table_item = QtWidgets.QTableWidgetItem(value)
+                    if column in (2, 4):
+                        table_item.setTextAlignment(
+                            QtCore.Qt.AlignmentFlag.AlignRight
+                            | QtCore.Qt.AlignmentFlag.AlignVCenter
+                        )
                     if column != 2:
                         table_item.setFlags(
                             table_item.flags() & ~QtCore.Qt.ItemFlag.ItemIsEditable
@@ -378,6 +394,10 @@ class NetItemsTable(QtWidgets.QTableWidget):
         rate_header = self.horizontalHeaderItem(1)
         if rate_header is not None:
             rate_header.setToolTip(self.RATE_EDIT_HINT)
+            rate_header.setTextAlignment(
+                QtCore.Qt.AlignmentFlag.AlignRight
+                | QtCore.Qt.AlignmentFlag.AlignVCenter
+            )
         table_hints = [self.RATE_EDIT_HINT]
         if activation_hint is not None:
             table_hints.append(activation_hint)
@@ -401,6 +421,10 @@ class NetItemsTable(QtWidgets.QTableWidget):
                     name_item.setToolTip(self._activation_hint)
 
                 amount_item = QtWidgets.QTableWidgetItem(number_format.decimal(amount))
+                amount_item.setTextAlignment(
+                    QtCore.Qt.AlignmentFlag.AlignRight
+                    | QtCore.Qt.AlignmentFlag.AlignVCenter
+                )
                 amount_item.setData(QtCore.Qt.ItemDataRole.UserRole, item)
                 amount_item.setToolTip(
                     number_format.exact_tooltip(amount, hint=self.RATE_EDIT_HINT)

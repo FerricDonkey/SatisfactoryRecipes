@@ -4,7 +4,7 @@ from satisfactory_recipes.gui import number_format
 
 
 def test_decimal_groups_thousands_without_converting_to_float() -> None:
-    assert number_format.decimal(fr.Fraction(3_700_000, 3)) == "1,233,333.333"
+    assert number_format.decimal(fr.Fraction(3_700_000, 3)) == "1_233_333.333"
 
 
 def test_mixed_number_preserves_exact_positive_and_negative_values() -> None:
